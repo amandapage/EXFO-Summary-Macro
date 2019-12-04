@@ -1,0 +1,2327 @@
+'Global variable declarations
+Dim bExitAll As Boolean
+Dim lCountFiles As Long
+Private Const LINE_NO_TEXT As String = "Line no: "
+
+Dim strFldrName As String
+Dim bAlreadyUsed As Boolean
+Dim bDeleteFiberCol As Boolean
+Dim bClickedRLA As Boolean
+Dim bClickedRLB As Boolean
+Dim bClickedRLC As Boolean
+Dim lWaveCount As Long
+Dim lCountB As Long
+Dim lCountC As Long
+
+
+Public Sub CallProcedures()
+'Optimize Macro Speed
+  Application.ScreenUpdating = False
+  Application.EnableEvents = False
+  Application.Calculation = xlCalculationManual
+  On Error GoTo errhandler
+  
+bClickedRLA = False
+bClickedRLB = False
+bClickedRLC = False
+bDeleteFiberCol = False
+
+
+Application.StatusBar = "Progress (1/8): Starting Up"
+bExitAll = False
+Application.StatusBar = "Progress (2/8): Importing Files"
+Call Startup
+Application.StatusBar = "Progress (2/8): Importing " & lCountFiles & " Files"
+'If cancel button is hit when importing files, the macro doesn't do anything and exits here
+    If bExitAll = True Then
+        Application.StatusBar = False
+        Exit Sub
+    End If
+    bExitAll = False
+Application.StatusBar = "Progress (3/8): Rearranging Raw Data"
+Call Rearrange
+    If bExitAll = True Then Exit Sub
+    bExitAll = False
+Call SortByDate
+Call DeleteRefCheck
+Application.StatusBar = "Progress (4/8): Checking for Cutback"
+Call ShowRLPopUp
+Call CutbackMeas
+Call DeleteCutback
+Application.StatusBar = "Progress (5/8): Arranging Summary By Test"
+Call ArrangebyTest
+Application.StatusBar = "Progress (6/8): Checking for IL/RL Changes"
+Call ILRLChange
+Call ApplyCriteria
+Call DeleteUnecessary
+Application.StatusBar = "Progress (7/8): Final Rearranging"
+Call Rearrange2
+Call MaxRow
+Call SummaryAppearance
+Application.StatusBar = "Progress (8/8): Creating Summary Tables"
+Call SummTables
+Call ApplyCriteriaSummTables
+Call SaveAs
+Call SelectA1
+
+Application.StatusBar = False
+
+'Reset Macro Optimization Settings
+  Application.EnableEvents = True
+  Application.Calculation = xlCalculationAutomatic
+  Application.ScreenUpdating = True
+
+Done:
+    Exit Sub
+errhandler:
+    DisplayError Err.Source, Err.Description, "Module1.CallProcedures", Erl
+
+End Sub
+
+Public Sub UpdateSummary()
+  
+  'Optimize Macro Speed
+  Application.ScreenUpdating = False
+  Application.EnableEvents = False
+  Application.Calculation = xlCalculationManual
+  On Error GoTo errhandler
+
+'Clear any previous data from the workbook
+ThisWorkbook.Sheets(3).UsedRange.ClearContents
+ThisWorkbook.Sheets(3).Cells.ClearFormats
+ThisWorkbook.Sheets(3).Cells.Interior.ColorIndex = 0
+ThisWorkbook.Sheets(3).Cells.FormatConditions.Delete
+ThisWorkbook.Sheets("Tables").Cells.FormatConditions.Delete
+ThisWorkbook.Sheets("Tables").Rows(2).ClearContents
+ThisWorkbook.Sheets("Tables").Range("B4:F9").ClearContents
+ThisWorkbook.Sheets("Tables").Rows(10 & ":" & Worksheets("Tables").Rows.Count).Delete
+
+bCLickedA = False
+bClickedB = False
+bClickedC = False
+bDeleteFiberCol = False
+
+Application.StatusBar = "Progress (1/6): Updating Summary"
+Call DeleteRefCheck
+Application.StatusBar = "Progress (2/6): Checking for Cutback"
+Call ShowRLPopUp
+Call CutbackMeas
+Call DeleteCutback
+Application.StatusBar = "Progress (3/6): Arranging Summary By Test"
+Call ArrangebyTest
+Application.StatusBar = "Progress (4/6): Checking for IL/RL Changes"
+Call ILRLChange
+Call ApplyCriteria
+Call DeleteUnecessary
+Application.StatusBar = "Progress (5/6): Final Rearranging"
+Call Rearrange2
+Call MaxRow
+Call SummaryAppearance
+Application.StatusBar = "Progress (6/6): Creating Summary Tables"
+Call SummTables
+Call ApplyCriteriaSummTables
+Call Save
+Call SelectA1
+
+Application.StatusBar = False
+
+'Reset Macro Optimization Settings
+  Application.EnableEvents = True
+  Application.Calculation = xlCalculationAutomatic
+  Application.ScreenUpdating = True
+
+Done:
+    Exit Sub
+errhandler:
+    RaiseError Err.Number, Err.Source, "Module1.UpdateSummary", Err.Description, Erl
+    
+End Sub
+
+Public Function GetWorkBook(ByVal sFullName As String) As Workbook
+    Dim strFile As String
+    Dim wbReturn As Workbook
+
+    strFile = Dir(sFullName)
+
+    On Error Resume Next
+        Set wbReturn = Workbooks(strFile)
+
+        If wbReturn Is Nothing Then
+            Set wbReturn = Workbooks.Open(sFullName)
+        End If
+    On Error GoTo 0
+
+    Set GetWorkBook = wbReturn
+End Function
+
+
+Public Sub Startup()
+
+Dim wb As Workbook
+Dim wb1 As Workbook
+Dim FldrPicker As FileDialog
+Dim strMyPath As String
+Dim strMyFile As String
+Dim strMyExtension As String
+Dim Filename As String
+Dim lLastRow As Long
+Dim strValCheck As String
+On Error GoTo errhandler
+
+
+lLastRow = 1
+lCountFiles = 0
+
+Set wb1 = ThisWorkbook
+
+
+ThisWorkbook.Sheets(2).UsedRange.ClearContents
+ThisWorkbook.Sheets(3).UsedRange.ClearContents
+ThisWorkbook.Sheets(3).Cells.Interior.ColorIndex = 0
+ThisWorkbook.Sheets(3).Cells.FormatConditions.Delete
+ThisWorkbook.Sheets("Tables").Cells.FormatConditions.Delete
+ThisWorkbook.Sheets("Tables").Rows(2).ClearContents
+ThisWorkbook.Sheets("Tables").Range("B4:F9").ClearContents
+ThisWorkbook.Sheets("Tables").Rows(10 & ":" & Worksheets("Tables").Rows.Count).Delete
+
+'Retrieve Target Folder Path From User
+  Set FldrPicker = Application.FileDialog(msoFileDialogFolderPicker)
+
+    With FldrPicker
+      .Title = "Select A Target Folder"
+      .AllowMultiSelect = False
+        If .Show <> -1 Then
+        'If cancel button is clicked
+            bExitAll = True
+            Exit Sub
+        Else
+        'If ok button is clicked
+            strMyPath = .SelectedItems(1) & "\"
+            strFldrName = .SelectedItems(1) & "\"
+        End If
+    End With
+
+'Target File Extension (must include wildcard "*")
+  strMyExtension = "*.csv*"
+
+'Target Path with Ending Extention
+  strMyFile = Dir(strMyPath & strMyExtension)
+
+'Loop through each Excel file in folder
+  Do While strMyFile <> ""
+    'Set variable equal to opened workbook
+      Set wb = Workbooks.Open(Filename:=strMyPath & strMyFile)
+      lCountFiles = lCountFiles + 1
+    
+    'Ensure Workbook has opened before moving on to next line of code
+      DoEvents
+    
+    'Copy data into raw data tab
+      wb.Worksheets(1).UsedRange.Copy
+      ThisWorkbook.Worksheets(2).Activate
+      ThisWorkbook.Worksheets(2).Cells(lLastRow, 1).Select
+      ThisWorkbook.Worksheets(2).PasteSpecial
+      lLastRow = Sheets(2).Cells(Rows.Count, 1).End(xlUp).Offset(1).Row
+    
+    'Save and Close Workbook
+      wb.Application.CutCopyMode = False
+      wb.Close False
+      
+    'Get next file name
+      strMyFile = Dir
+  Loop
+
+Done:
+    Exit Sub
+errhandler:
+    RaiseError Err.Number, Err.Source, "Module1.Startup", Err.Description, Erl
+
+End Sub
+Public Sub SelectA1()
+On Error GoTo errhandler
+
+    Dim ws As Worksheet
+        
+    For Each ws In ActiveWorkbook.Sheets
+        ws.Activate
+        ws.[a1].Select
+        Application.GoTo Reference:=Range("a1"), Scroll:=True
+    Next ws
+    Worksheets("Summary").Activate
+    
+Done:
+    Exit Sub
+errhandler:
+    RaiseError Err.Number, Err.Source, "Module1.SelectA1", Err.Description, Erl
+
+        
+End Sub
+Public Sub Rearrange()
+
+Dim strfileName As String
+Dim lLastRow As Long
+Dim nSampleCount As Integer
+Dim nFiberCount As Integer
+
+Dim rngFind13 As Range
+Dim strFind13 As String
+Dim strColLtr13 As String
+Dim lColNum13 As Long
+Dim rngFind14 As Range
+Dim strFind14 As String
+Dim strColLtr14 As String
+Dim lColNum14 As Long
+Dim rngFind15 As Range
+Dim strFind15 As String
+Dim strColLtr15 As String
+Dim lColNum15 As Long
+Dim rngFind16 As Range
+Dim strFind16 As String
+Dim strColLtr16 As String
+Dim lColNum16 As Long
+
+Dim rngFindAB13 As Range
+Dim strFindAB13 As String
+Dim strColLtrAB13 As String
+Dim lColNumAB13 As Long
+Dim rngFindAB14 As Range
+Dim strFindAB14 As String
+Dim strColLtrAB14 As String
+Dim lColNumAB14 As Long
+Dim rngFindAB15 As Range
+Dim strFindAB15 As String
+Dim strColLtrAB15 As String
+Dim lColNumAB15 As Long
+Dim rngFindAB16 As Range
+Dim strFindAB16 As String
+Dim strColLtrAB16 As String
+Dim lColNumAB16 As Long
+On Error GoTo errhandler
+
+strfileName = "EXFOSummaryMacro"
+lLastRow = Sheets(2).Cells(Rows.Count, 1).End(xlUp).Row
+nSampleCount = 1
+
+'Error catch if file isn't raw data
+If Cells(2, 1) <> "Fiber" Then
+    MsgBox ("The folder selected has data in the wrong format.")
+    bExitAll = True
+    Exit Sub
+End If
+
+
+'Find the column number of the 1310 IL Label in raw data
+Set rngFind13 = Range("A2:Z2").Find("1310 IL")
+If rngFind13 Is Nothing Then
+    lColNum13 = 50 'Arbitrary column with blank value picked
+Else
+    strFind13 = rngFind13.Address(False, False)
+    strColLtr13 = Left(strFind13, 1)
+    lColNum13 = Range(strColLtr13 & 1).Column
+End If
+
+'Find the column number of the 1490 IL Label in raw data
+Set rngFind14 = Range("A2:Z2").Find("1490 IL")
+If rngFind14 Is Nothing Then
+    lColNum14 = 50 'Arbitrary column with blank value picked
+Else
+    strFind14 = rngFind14.Address(False, False)
+    strColLtr14 = Left(strFind14, 1)
+    lColNum14 = Range(strColLtr14 & 1).Column
+End If
+
+'Find the column number of the 1550 IL Label in raw data
+Set rngFind15 = Range("A2:Z2").Find("1550 IL")
+If rngFind15 Is Nothing Then
+    lColNum15 = 50 'Arbitrary column with blank value picked
+Else
+    strFind15 = rngFind15.Address(False, False)
+    strColLtr15 = Left(strFind15, 1)
+    lColNum15 = Range(strColLtr15 & 1).Column
+End If
+
+'Find the column number of the 1625 IL Label in raw data
+Set rngFind16 = Range("A2:Z2").Find("1625 IL")
+If rngFind16 Is Nothing Then
+    lColNum16 = 50 'Arbitrary column with blank value picked
+Else
+    strFind16 = rngFind16.Address(False, False)
+    strColLtr16 = Left(strFind16, 1)
+    lColNum16 = Range(strColLtr16 & 1).Column
+End If
+
+'Find the column number of the LenA-B 1310 Label in raw data
+Set rngFindAB13 = Range("A2:Z2").Find("LenA-B13")
+If rngFindAB13 Is Nothing Then
+    lColNumAB13 = 50 'Arbitrary column with blank value picked
+Else
+    strFindAB13 = rngFindAB13.Address(False, False)
+    strColLtrAB13 = Left(strFindAB13, 1)
+    lColNumAB13 = Range(strColLtrAB13 & 1).Column
+End If
+
+'Find the column number of the LenA-B 1490 Label in raw data
+Set rngFindAB14 = Range("A2:Z2").Find("LenA-B14")
+If rngFindAB14 Is Nothing Then
+    lColNumAB14 = 50 'Arbitrary column with blank value picked
+Else
+    strFindAB14 = rngFindAB14.Address(False, False)
+    strColLtrAB14 = Left(strFindAB14, 1)
+    lColNumAB14 = Range(strColLtrAB14 & 1).Column
+End If
+
+'Find the column number of the LenA-B 1550 Label in raw data
+Set rngFindAB15 = Range("A2:Z2").Find("LenA-B15")
+If rngFindAB15 Is Nothing Then
+    lColNumAB15 = 50 'Arbitrary column with blank value picked
+Else
+    strFindAB15 = rngFindAB15.Address(False, False)
+    strColLtrAB15 = Left(strFindAB15, 1)
+    lColNumAB15 = Range(strColLtrAB15 & 1).Column
+End If
+
+'Find the column number of the LenA-B 1625 Label in raw data
+Set rngFindAB16 = Range("A2:Z2").Find("LenA-B16")
+If rngFindAB16 Is Nothing Then
+    lColNumAB16 = 50 'Arbitrary column with blank value picked
+Else
+    strFindAB16 = rngFindAB16.Address(False, False)
+    strColLtrAB16 = Left(strFindAB16, 1)
+    lColNumAB16 = Range(strColLtrAB16 & 1).Column
+End If
+
+
+Dim s As String
+For Each C In ActiveSheet.UsedRange
+    s = C.Value
+    If Trim(Application.Clean(s)) <> s Then
+        s = Trim(Application.Clean(s))
+        C.Value = s
+    End If
+Next
+    
+For i = 1 To lLastRow
+    If Cells(i, 1) = "Fiber" Then
+        If Cells(i + 3, 1) = "Fiber" Or Cells(i + 3, 1) = "" Then
+            Cells(lLastRow + nSampleCount, 1).Value = Cells(i - 1, 8).Value 'Test
+            Cells(lLastRow + nSampleCount, 2).Value = Cells(i - 1, 1).Value 'Sample
+            Cells(lLastRow + nSampleCount, 3).Value = Cells(i + 1, 1).Value 'Fiber
+            Cells(lLastRow + nSampleCount, 4).Value = Cells(i + 1, lColNum13).Value '1310 IL
+            Cells(lLastRow + nSampleCount, 5).Value = Cells(i + 1, lColNum14).Value '1490 IL
+            Cells(lLastRow + nSampleCount, 6).Value = Cells(i + 1, lColNum15).Value '1550 IL
+            Cells(lLastRow + nSampleCount, 7).Value = Cells(i + 1, lColNum16).Value '1625 IL
+            Cells(lLastRow + nSampleCount, 8).Value = Cells(i + 1, lColNum13 + 2).Value '1310 RLB
+            Cells(lLastRow + nSampleCount, 9).Value = Cells(i + 1, lColNum14 + 2).Value '1490 RLB
+            Cells(lLastRow + nSampleCount, 10).Value = Cells(i + 1, lColNum15 + 2).Value '1550 RLB
+            Cells(lLastRow + nSampleCount, 11).Value = Cells(i + 1, lColNum16 + 2).Value '1625 RLB
+            Cells(lLastRow + nSampleCount, 12).Value = Cells(i + 1, lColNum13 + 3).Value '1310 RLC
+            Cells(lLastRow + nSampleCount, 13).Value = Cells(i + 1, lColNum14 + 3).Value '1490 RLC
+            Cells(lLastRow + nSampleCount, 14).Value = Cells(i + 1, lColNum15 + 3).Value '1550 RLC
+            Cells(lLastRow + nSampleCount, 15).Value = Cells(i + 1, lColNum16 + 3).Value '1625 RLC
+            Cells(lLastRow + nSampleCount, 16).Value = Cells(i + 1, lColNum13 + 1).Value '1310 RLA
+            Cells(lLastRow + nSampleCount, 17).Value = Cells(i + 1, lColNum14 + 1).Value '1490 RLA
+            Cells(lLastRow + nSampleCount, 18).Value = Cells(i + 1, lColNum15 + 1).Value '1550 RLA
+            Cells(lLastRow + nSampleCount, 19).Value = Cells(i + 1, lColNum16 + 1).Value '1625 RLA
+            Cells(lLastRow + nSampleCount, 20).Value = Cells(i + 1, lColNumAB13).Value 'LenA-B13
+            Cells(lLastRow + nSampleCount, 21).Value = Cells(i + 1, lColNumAB14).Value 'LenA-B14
+            Cells(lLastRow + nSampleCount, 22).Value = Cells(i + 1, lColNumAB15).Value 'LenA-B15
+            Cells(lLastRow + nSampleCount, 23).Value = Cells(i + 1, lColNumAB16).Value 'LenA-B16
+            Cells(lLastRow + nSampleCount, 24).Value = Cells(i + 1, lColNumAB13 + 1).Value 'LenA-C13
+            Cells(lLastRow + nSampleCount, 25).Value = Cells(i + 1, lColNumAB14 + 1).Value 'LenA-C14
+            Cells(lLastRow + nSampleCount, 26).Value = Cells(i + 1, lColNumAB15 + 1).Value 'LenA-C15
+            Cells(lLastRow + nSampleCount, 27).Value = Cells(i + 1, lColNumAB16 + 1).Value 'LenA-C16
+            Cells(lLastRow + nSampleCount, 28).Value = Cells(i - 1, 2).Value 'Tech
+            Cells(lLastRow + nSampleCount, 29).Value = Cells(i - 1, 3).Value 'Date
+            Cells(lLastRow + nSampleCount, 30).Value = Cells(i - 1, 4).Value 'LabTrack
+            Cells(lLastRow + nSampleCount, 31).Value = Cells(i - 1, 5).Value 'Temp
+            Cells(lLastRow + nSampleCount, 32).Value = Cells(i - 1, 6).Value 'Humidity
+            Cells(lLastRow + nSampleCount, 33).Value = Cells(i - 1, 7).Value 'System
+            nSampleCount = nSampleCount + 1
+        Else
+            For j = i + 1 To lLastRow + 1
+                If Cells(j, 1).Value = "Fiber" Then
+                    nFiberCount = (j - 2) - (i + 1)
+                    Exit For
+                End If
+                If Cells(j, 1).Value = "" Then
+                    nFiberCount = (j - 1) - (i + 1)
+                    Exit For
+                End If
+            Next j
+            For k = i To i + nFiberCount
+                Cells(lLastRow + nSampleCount, 1).Value = Cells(i - 1, 8).Value 'Test
+                Cells(lLastRow + nSampleCount, 2).Value = Cells(i - 1, 1).Value 'Sample
+                Cells(lLastRow + nSampleCount, 3).Value = Cells(k + 1, 1).Value 'Fiber
+                Cells(lLastRow + nSampleCount, 4).Value = Cells(k + 1, lColNum13).Value '1310 IL
+                Cells(lLastRow + nSampleCount, 5).Value = Cells(k + 1, lColNum14).Value '1490 IL
+                Cells(lLastRow + nSampleCount, 6).Value = Cells(k + 1, lColNum15).Value '1550 IL
+                Cells(lLastRow + nSampleCount, 7).Value = Cells(k + 1, lColNum16).Value '1625 IL
+                Cells(lLastRow + nSampleCount, 8).Value = Cells(k + 1, lColNum13 + 2).Value '1310 RLB
+                Cells(lLastRow + nSampleCount, 9).Value = Cells(k + 1, lColNum14 + 2).Value '1490 RLB
+                Cells(lLastRow + nSampleCount, 10).Value = Cells(k + 1, lColNum15 + 2).Value '1550 RLB
+                Cells(lLastRow + nSampleCount, 11).Value = Cells(k + 1, lColNum16 + 2).Value '1625 RLB
+                Cells(lLastRow + nSampleCount, 12).Value = Cells(k + 1, lColNum13 + 3).Value '1310 RLC
+                Cells(lLastRow + nSampleCount, 13).Value = Cells(k + 1, lColNum14 + 3).Value '1490 RLC
+                Cells(lLastRow + nSampleCount, 14).Value = Cells(k + 1, lColNum15 + 3).Value '1550 RLC
+                Cells(lLastRow + nSampleCount, 15).Value = Cells(k + 1, lColNum16 + 3).Value '1625 RLC
+                Cells(lLastRow + nSampleCount, 16).Value = Cells(k + 1, lColNum13 + 1).Value '1310 RLA
+                Cells(lLastRow + nSampleCount, 17).Value = Cells(k + 1, lColNum14 + 1).Value '1490 RLA
+                Cells(lLastRow + nSampleCount, 18).Value = Cells(k + 1, lColNum15 + 1).Value '1550 RLA
+                Cells(lLastRow + nSampleCount, 19).Value = Cells(k + 1, lColNum16 + 1).Value '1625 RLA
+                Cells(lLastRow + nSampleCount, 20).Value = Cells(k + 1, lColNumAB13).Value 'LenA-B13
+                Cells(lLastRow + nSampleCount, 21).Value = Cells(k + 1, lColNumAB14).Value 'LenA-B14
+                Cells(lLastRow + nSampleCount, 22).Value = Cells(k + 1, lColNumAB15).Value 'LenA-B15
+                Cells(lLastRow + nSampleCount, 23).Value = Cells(k + 1, lColNumAB16).Value 'LenA-B16
+                Cells(lLastRow + nSampleCount, 24).Value = Cells(k + 1, lColNumAB13 + 1).Value 'LenA-C13
+                Cells(lLastRow + nSampleCount, 25).Value = Cells(k + 1, lColNumAB14 + 1).Value 'LenA-C14
+                Cells(lLastRow + nSampleCount, 26).Value = Cells(k + 1, lColNumAB15 + 1).Value 'LenA-C15
+                Cells(lLastRow + nSampleCount, 27).Value = Cells(k + 1, lColNumAB16 + 1).Value 'LenA-C16
+                Cells(lLastRow + nSampleCount, 28).Value = Cells(i - 1, 2).Value 'Tech
+                Cells(lLastRow + nSampleCount, 29).Value = Cells(i - 1, 3).Value 'Date
+                Cells(lLastRow + nSampleCount, 30).Value = Cells(i - 1, 4).Value 'LabTrack
+                Cells(lLastRow + nSampleCount, 31).Value = Cells(i - 1, 5).Value 'Temp
+                Cells(lLastRow + nSampleCount, 32).Value = Cells(i - 1, 6).Value 'Humidity
+                Cells(lLastRow + nSampleCount, 33).Value = Cells(i - 1, 7).Value 'System
+                nSampleCount = nSampleCount + 1
+            Next k
+        End If
+    End If
+Next i
+
+Columns("C").NumberFormat = General 'Fix date error
+
+If Cells(2, 1) = "Fiber" Then
+    Cells(lLastRow, 1).Value = "Test"
+    Cells(lLastRow, 2).Value = "Sample"
+    Cells(lLastRow, 3).Value = "Fiber"
+    Cells(lLastRow, 4).Value = "1310 IL"
+    Cells(lLastRow, 5).Value = "1490 IL"
+    Cells(lLastRow, 6).Value = "1550 IL"
+    Cells(lLastRow, 7).Value = "1625 IL"
+    Cells(lLastRow, 8).Value = "1310 RLB"
+    Cells(lLastRow, 9).Value = "1490 RLB"
+    Cells(lLastRow, 10).Value = "1550 RLB"
+    Cells(lLastRow, 11).Value = "1625 RLB"
+    Cells(lLastRow, 12).Value = "1310 RLC"
+    Cells(lLastRow, 13).Value = "1490 RLC"
+    Cells(lLastRow, 14).Value = "1550 RLC"
+    Cells(lLastRow, 15).Value = "1625 RLC"
+    Cells(lLastRow, 16).Value = "1310 RLA"
+    Cells(lLastRow, 17).Value = "1490 RLA"
+    Cells(lLastRow, 18).Value = "1550 RLA"
+    Cells(lLastRow, 19).Value = "1625 RLA"
+    Cells(lLastRow, 20).Value = "LenA-B13"
+    Cells(lLastRow, 21).Value = "LenA-B14"
+    Cells(lLastRow, 22).Value = "LenA-B15"
+    Cells(lLastRow, 23).Value = "LenA-B16"
+    Cells(lLastRow, 24).Value = "LenA-C13"
+    Cells(lLastRow, 25).Value = "LenA-C14"
+    Cells(lLastRow, 26).Value = "LenA-C15"
+    Cells(lLastRow, 27).Value = "LenA-C16"
+    Cells(lLastRow, 28).Value = "Tech"
+    Cells(lLastRow, 29).Value = "Date"
+    Cells(lLastRow, 30).Value = "LabTrack"
+    Cells(lLastRow, 31).Value = "Temp"
+    Cells(lLastRow, 32).Value = "Humidity"
+    Cells(lLastRow, 33).Value = "System"
+End If
+
+Range(Cells(1, 1), Cells(lLastRow - 1, 33)).Delete 'Delete raw data above summarized data
+Range(Cells(2, 3), Cells(nSampleCount, 33)).HorizontalAlignment = xlRight
+Sheets(2).UsedRange.Columns.AutoFit
+Sheets(2).UsedRange.Rows.AutoFit
+Sheets(2).Name = "Raw Data"
+Sheets(3).Name = "Summary"
+
+Done:
+    Exit Sub
+errhandler:
+    RaiseError Err.Number, Err.Source, "Module1.Rearrange", Err.Description, Erl
+
+End Sub
+
+
+Public Sub DeleteRefCheck()
+
+Dim lLastRow As Long
+Dim nTestString As Integer
+On Error GoTo errhandler
+
+ThisWorkbook.Activate
+ThisWorkbook.Sheets(2).UsedRange.Copy
+ThisWorkbook.Sheets(3).Select
+ThisWorkbook.Sheets(3).Range("A1").PasteSpecial
+
+lLastRow = Sheets(3).Cells(Rows.Count, 1).End(xlUp).Row
+
+'If ref or check is found in a row, delete that row
+For i = lLastRow To 1 Step -1
+    If InStr(1, (Cells(i, 1).Value), "Check", vbTextCompare) > 0 Or InStr(1, (Cells(i, 1).Value), "Ref", vbTextCompare) > 0 Then
+        Rows(i).Delete
+    End If
+    'If InStr(1, (Cells(i, 1).Value), "/STM106") > 0 Then
+        'Cells(i, 1).Value = Left(Cells(i, 1).Value, InStr(1, (Cells(i, 1).Value), "/STM106") - 1)
+    'End If
+Next i
+
+lLastRow = Sheets(3).Cells(Rows.Count, 1).End(xlUp).Row
+
+'Formats the numbers in the sheet
+Range(Cells(2, 4), Cells(lLastRow, 7)).NumberFormat = "0.00"
+Range(Cells(2, 8), Cells(lLastRow, 19)).NumberFormat = "0.0"
+
+Sheets(3).UsedRange.Columns.AutoFit
+
+Done:
+    Exit Sub
+errhandler:
+    RaiseError Err.Number, Err.Source, "Module1.DeleteRefCheck", Err.Description, Erl
+    
+End Sub
+
+
+Public Sub DeleteCutback()
+
+Dim lLastRow As Long
+Dim nTestString As Integer
+Dim rng As Range
+Dim lMyNum As Long
+On Error GoTo errhandler
+
+ThisWorkbook.Sheets(3).Activate
+
+lLastRow = Sheets(3).Cells(Rows.Count, 1).End(xlUp).Row
+
+'If a cutback is found in test desciption, delete that row from summary
+For i = lLastRow To 1 Step -1
+    If InStr(1, (Cells(i, 1).Value), "Cut", vbTextCompare) > 0 Then
+        Rows(i).Delete
+    End If
+Next i
+
+'Checks if all fibers are 1, then can delete that column later
+If Cells(1, 3) = "Fiber" Then
+    lMyNum = 1
+    Set rng = Range(Cells(2, 3), Cells(lLastRow, 3))
+    If WorksheetFunction.CountIf(rng, lMyNum) = rng.Count Then
+        bDeleteFiberCol = True
+    End If
+End If
+
+Sheets(3).UsedRange.Columns.AutoFit
+
+Done:
+    Exit Sub
+errhandler:
+    RaiseError Err.Number, Err.Source, "Module1.DeleteCutback", Err.Description, Erl
+End Sub
+
+
+Public Sub ArrangebyTest()
+Dim lLastRow As Long
+Dim lLastRow2 As Long
+Dim j As Integer
+Dim CheckCell
+Dim dbCounter As Double
+Dim strTestNum() As String
+Dim nSampleCount As Integer
+On Error GoTo errhandler
+
+lLastRow = Sheets(3).Cells(Rows.Count, 1).End(xlUp).Row
+dbCounter = 0
+
+'Count how many different tests
+For Each CheckCell In Range(Cells(2, 1), Cells(lLastRow, 1))
+    dbCounter = dbCounter + (1 / (WorksheetFunction.CountIf(Range(Cells(2, 1), Cells(lLastRow, 1)), CheckCell.Value)))
+Next
+
+ReDim strTestNum(dbCounter + 1)
+
+For j = 2 To lLastRow
+    For i = 1 To dbCounter + 1
+        If Cells(j, 1).Value = strTestNum(i) Then
+            Exit For
+        ElseIf strTestNum(i) = "" Then
+            strTestNum(i) = Cells(j, 1).Value
+            Exit For
+        End If
+    Next i
+Next j
+
+'Copies and pastes all tests with the same description into the summary tab under the test name
+For i = 1 To dbCounter + 1
+    lLastRow2 = Sheets(3).Cells(Rows.Count, 2).End(xlUp).Row
+    Cells(lLastRow2 + 2, 2).Value = strTestNum(i)
+    Range(Cells(1, 2), Cells(1, 33)).Copy
+    Cells(lLastRow2 + 3, 2).PasteSpecial
+    nSampleCount = 1
+    For j = 2 To lLastRow
+        If Cells(j, 1).Value = strTestNum(i) Then
+            Range(Cells(j, 2), Cells(j, 33)).Copy
+            Cells(lLastRow2 + 3 + nSampleCount, 2).PasteSpecial
+            nSampleCount = nSampleCount + 1
+        End If
+    Next j
+Next i
+       
+Rows("1:" & lLastRow).EntireRow.Delete
+Columns(1).EntireColumn.Delete
+
+
+Done:
+    Exit Sub
+errhandler:
+    RaiseError Err.Number, Err.Source, "Module1.ArrangebyTest", Err.Description, Erl
+
+End Sub
+
+
+Public Sub DeleteUnecessary()
+
+Dim lLastRow As Long
+On Error GoTo errhandler
+
+Sheets("Summary").Activate
+lLastRow = Sheets("Summary").Cells(Rows.Count, 1).End(xlUp).Row
+
+'Deletes Length and tech info from summary
+Range(Cells(3, 19), Cells(lLastRow, 32)).ClearContents
+
+'RLA in summary
+If bClickedRLA = True Then
+    'Deletes RLB from summary
+    Range("G3:J3").Select
+    Range(Selection, Selection.End(xlDown)).Select
+    Range(Cells(3, 7), Cells(lLastRow, 10)).ClearContents
+    
+    'Deletes RLC from summary
+    Range("K3:N3").Select
+    Range(Selection, Selection.End(xlDown)).Select
+    Range(Cells(3, 11), Cells(lLastRow, 14)).ClearContents
+End If
+
+' RLB in summary
+If bClickedRLB = True Then
+    'Deletes RLA from summary
+    Range("O3:R3").Select
+    Range(Selection, Selection.End(xlDown)).Select
+    Range(Cells(3, 15), Cells(lLastRow, 18)).ClearContents
+    
+    'Deletes RLC from summary
+    Range("K3:N3").Select
+    Range(Selection, Selection.End(xlDown)).Select
+    Range(Cells(3, 11), Cells(lLastRow, 14)).ClearContents
+End If
+
+'RLC in summary
+If bClickedRLC = True Then
+    'Deletes RLA from summary
+    Range("O3:R3").Select
+    Range(Selection, Selection.End(xlDown)).Select
+    Range(Cells(3, 15), Cells(lLastRow, 18)).ClearContents
+    
+    'Deletes RLB from summary
+    Range("G3:J3").Select
+    Range(Selection, Selection.End(xlDown)).Select
+    Range(Cells(3, 7), Cells(lLastRow, 10)).ClearContents
+End If
+
+'If all the cells in a column are blank, delete that column from the summary
+For i = ActiveSheet.UsedRange.Columns.Count To 3 Step -1
+        If WorksheetFunction.Count(ActiveSheet.Range(ActiveSheet.Cells(3, i), ActiveSheet.Cells(lLastRow, i))) = 0 Then
+            ActiveSheet.Columns(i).Delete
+        End If
+Next i
+
+
+If Cells(lLastRow, 1) = "Sample" Then
+    ActiveSheet.Rows(lLastRow).Delete
+End If
+
+Done:
+    Exit Sub
+errhandler:
+    RaiseError Err.Number, Err.Source, "Module1.DeleteUnecessary", Err.Description, Erl
+    
+End Sub
+Public Sub ShowRLPopUp()
+Dim lLastRow As Long
+Dim bShowPopUp As Boolean
+
+On Error GoTo errhandler
+
+lLastRow = Sheets(3).Cells(Rows.Count, 1).End(xlUp).Row
+lCountB = 0
+lCountC = 0
+'Scan the rows and columns with RLB to check for numbers
+For i = 8 To 11
+    For j = 2 To lLastRow
+        If Cells(j, i).Value <> "" And Cells(j, i).Value <> "<-99" And Cells(j, i).Value <> 0 Then
+            lCountB = lCountB + 1
+        End If
+    Next j
+Next i
+
+'Scan the rows and columns with RLC to check for numbers
+For i = 12 To 15
+    For j = 2 To lLastRow
+        If Cells(j, i).Value <> "" And Cells(j, i).Value <> "<-99" And Cells(j, i).Value <> 0 Then
+            lCountC = lCountC + 1
+        End If
+    Next j
+Next i
+
+
+'If there is data in RLB/RLC then show pop up
+If lCountB > 2 And lCountC < 2 Then
+    RLPopUp.ReflCButton.Visible = False
+    RLPopUp.Show
+ElseIf lCountB < 2 And lCountC > 2 Then
+    RLPopUp.ReflBButton.Visible = False
+    RLPopUp.Show
+ElseIf lCountB > 2 And lCountC > 2 Then
+    RLPopUp.Show
+Else
+    Call ChooseRLA
+End If
+
+
+Done:
+    Exit Sub
+errhandler:
+    RaiseError Err.Number, Err.Source, "Module1.ShowRLPopUp", Err.Description, Erl
+
+End Sub
+Public Sub ChooseRLA()
+
+bClickedRLA = True
+
+End Sub
+
+Public Sub ChooseRLB()
+
+bClickedRLB = True
+
+End Sub
+
+Public Sub ChooseRLC()
+
+bClickedRLC = True
+
+End Sub
+
+Public Sub CutbackMeas()
+
+Dim lLastRow As Long
+Dim lCutbackRowFirst As Long
+Dim lCutbackRowLast As Long
+Dim lFirstIL As Long
+On Error GoTo errhandler
+
+lLastRow = Sheets(3).Cells(Rows.Count, 1).End(xlUp).Row
+
+'Finds the row of the first cutback measurement
+lCutbackRowFirst = 0
+For i = 2 To lLastRow
+        If InStr(1, (Cells(i, 1).Value), "Cut", vbTextCompare) > 0 Then
+            lCutbackRowFirst = i + 2
+            Exit For
+        End If
+Next i
+
+'If cutback is detected, userform pop up asking which forms to apply
+If lCutbackRowFirst <> 0 Then
+    FormOptions.Show 'Show the pop up selection for Forms A & B & D
+    Select Case FormOptions.Tag
+        Case 0 'Cancel Option
+            GoTo labelExit
+    End Select
+End If
+
+
+labelExit:
+    Unload FormOptions
+    Set FormOptions = Nothing
+
+Done:
+    Exit Sub
+errhandler:
+    RaiseError Err.Number, Err.Source, "Module1.CutbackMeas", Err.Description, Erl
+   
+End Sub
+
+Public Sub ILRLChange()
+
+Dim lLastRow As Long
+Dim lLastCol As Long
+Dim lFirstInitial As Long
+Dim lLastInitial As Long
+Dim lFirstIL As Long
+Dim lFirstRL As Long
+On Error GoTo errhandler
+
+
+lLastRow = Sheets(3).Cells(Rows.Count, 1).End(xlUp).Row
+lLastCol = Sheets(3).Cells(3, Columns.Count).End(xlToLeft).Column
+
+'Finds the columns of the first IL and RL
+If Cells(3, 2) = "Fiber" Then
+    lFirstIL = 3
+    If bClickedRLA = True Then
+        lFirstRL = 15
+    ElseIf bClickedRLB = True Then
+        lFirstRL = 7
+    ElseIf bClickedRLC = True Then
+        lFirstRL = 11
+    End If
+Else
+    lFirstIL = 2
+    If bClickedRLA = True Then
+        lFirstRL = 14
+    ElseIf bClickedRLB = True Then
+        lFirstRL = 6
+    ElseIf bClickedRLC = True Then
+        lFirstRL = 10
+    End If
+End If
+
+'Finds the section with the initial measurements
+For i = 2 To lLastRow
+        If InStr(1, (Cells(i, 1).Value), "Initial") > 0 Then
+            lFirstInitial = i + 2
+            Cells(lFirstInitial, 1).Select
+            lLastInitial = Selection.End(xlDown).Row
+            
+            For j = lFirstInitial To lLastInitial
+                For k = lLastInitial + 2 To lLastRow
+                    If Cells(k, 1).Value = Cells(j, 1).Value And Cells(k, 2).Value = Cells(j, 2).Value Then
+                        'IL Change from initial
+                        If Cells(k, lFirstIL).Value <> "" Then
+                            Cells(k, lLastCol + 1).Value = Cells(k, lFirstIL).Value - Cells(j, lFirstIL).Value
+                        End If
+                        If Cells(k, lFirstIL + 1).Value <> "" Then
+                            Cells(k, lLastCol + 2).Value = Cells(k, lFirstIL + 1).Value - Cells(j, lFirstIL + 1).Value
+                        End If
+                        If Cells(k, lFirstIL + 2).Value <> "" Then
+                            Cells(k, lLastCol + 3).Value = Cells(k, lFirstIL + 2).Value - Cells(j, lFirstIL + 2).Value
+                        End If
+                        If Cells(k, lFirstIL + 3).Value <> "" Then
+                            Cells(k, lLastCol + 4).Value = Cells(k, lFirstIL + 3).Value - Cells(j, lFirstIL + 3).Value
+                        End If
+                        
+                        'RL Change from initial
+                        If Cells(k, lFirstRL).Value <> "<-99" And Cells(k, lFirstRL).Value <> "" And Cells(j, lFirstRL).Value <> "" And Cells(j, lFirstRL).Value <> "<-99" Then
+                            Cells(k, lLastCol + 5).Value = Cells(k, lFirstRL).Value - Cells(j, lFirstRL).Value
+                        End If
+                        If Cells(k, lFirstRL + 1).Value <> "<-99" And Cells(k, lFirstRL + 1).Value <> "" And Cells(j, lFirstRL + 1).Value <> "" And Cells(j, lFirstRL + 1).Value <> "<-99" Then
+                            Cells(k, lLastCol + 6).Value = Cells(k, lFirstRL + 1).Value - Cells(j, lFirstRL + 1).Value
+                        End If
+                        If Cells(k, lFirstRL + 2).Value <> "<-99" And Cells(k, lFirstRL + 2).Value <> "" And Cells(j, lFirstRL + 2).Value <> "" And Cells(j, lFirstRL + 2).Value <> "<-99" Then
+                            Cells(k, lLastCol + 7).Value = Cells(k, lFirstRL + 2).Value - Cells(j, lFirstRL + 2).Value
+                        End If
+                        If Cells(k, lFirstRL + 3).Value <> "<-99" And Cells(k, lFirstRL + 3).Value <> "" And Cells(j, lFirstRL + 3).Value <> "" And Cells(j, lFirstRL + 3).Value <> "<-99" Then
+                            Cells(k, lLastCol + 8).Value = Cells(k, lFirstRL + 3).Value - Cells(j, lFirstRL + 3).Value
+                        End If
+                    End If
+                    
+                    'If initial is in the test description for what is being subtracted from the initial value, exit the loop
+                    If InStr(1, (Cells(k, 1).Value), "Initial") > 0 Then
+                        Exit For
+                    End If
+                    
+                    'Adds the labels for the IL and RL changes to the last columns
+                    If Cells(k, 1).Value = "Sample" Then
+                        Cells(k, lLastCol + 1).Value = "13 IL " & ChrW(916)
+                        Cells(k, lLastCol + 2).Value = "14 IL " & ChrW(916)
+                        Cells(k, lLastCol + 3).Value = "15 IL " & ChrW(916)
+                        Cells(k, lLastCol + 4).Value = "16 IL " & ChrW(916)
+                        Cells(k, lLastCol + 5).Value = "13 RL " & ChrW(916)
+                        Cells(k, lLastCol + 6).Value = "14 RL " & ChrW(916)
+                        Cells(k, lLastCol + 7).Value = "15 RL " & ChrW(916)
+                        Cells(k, lLastCol + 8).Value = "16 RL " & ChrW(916)
+                    End If
+
+                Next k
+            Next j
+        End If
+Next i
+                   
+Range(Cells(1, lLastCol + 1), Cells(lLastRow, lLastCol + 8)).NumberFormat = "0.00"
+Sheets(3).UsedRange.Columns.AutoFit
+
+Done:
+    Exit Sub
+errhandler:
+    RaiseError Err.Number, Err.Source, "Module1.ILRLChange", Err.Description, Erl
+
+End Sub
+
+
+Public Sub Rearrange2()
+
+Dim lLastRow As Long
+Dim lLastCol As Long
+Dim lFirstIL As Long
+Dim lILcount As Long
+On Error GoTo errhandler
+
+lLastRow = Sheets(3).Cells(Rows.Count, 1).End(xlUp).Row
+lLastCol = Sheets(3).Cells(3, Columns.Count).End(xlToLeft).Column
+
+'Finds the column of the first IL measurement
+If Cells(3, 2) = "Fiber" Then
+    lFirstIL = 3
+Else
+    lFirstIL = 2
+End If
+
+'Changes the labels from full wavelength value to first 2 numbers (ex. 1310 becomes 13)
+For i = 1 To lLastRow
+    If Cells(i, 1).Value = "Sample" Then
+        Range(Cells(i, lFirstIL), Cells(i, lLastCol)).HorizontalAlignment = xlCenter
+        For j = lFirstIL To lLastCol
+            If InStr(1, (Cells(i, j).Value), "1310") > 0 Then
+                Cells(i, j).Value = Replace(Cells(i, j).Value, "1310", "13")
+            ElseIf InStr(1, (Cells(i, j).Value), "1490") > 0 Then
+                Cells(i, j).Value = Replace(Cells(i, j).Value, "1490", "14")
+            ElseIf InStr(1, (Cells(i, j).Value), "1550") > 0 Then
+                Cells(i, j).Value = Replace(Cells(i, j).Value, "1550", "15")
+            ElseIf InStr(1, (Cells(i, j).Value), "1625") > 0 Then
+                Cells(i, j).Value = Replace(Cells(i, j).Value, "1625", "16")
+            End If
+        Next j
+    End If
+Next i
+
+
+'Counts how many wavelengths were measured and bases the spacing off of that number
+lILcount = 0
+For j = lFirstIL To lLastCol
+    If InStr(1, Cells(3, j), "IL") > 0 Then
+        lILcount = lILcount + 1
+    End If
+Next j
+    
+lWaveCount = lILcount
+
+Columns(lFirstIL + (lILcount * 4)).Insert
+Columns(lFirstIL + (lILcount * 3)).Insert
+Columns(lFirstIL + (lILcount * 2)).Insert
+Columns(lFirstIL + lILcount).Insert
+Columns(lFirstIL).Insert
+    
+
+Range(Cells(1, lFirstIL), Cells(lLastRow, lFirstIL + 50)).ColumnWidth = 5.87
+
+'Fixes error where random cells highlighted red
+For i = ActiveSheet.UsedRange.Columns.Count To 4 Step -1
+        If WorksheetFunction.Count(ActiveSheet.Range(ActiveSheet.Cells(4, i), ActiveSheet.Cells(lLastRow, i))) = 0 Then
+                ActiveSheet.Columns(i).FormatConditions.Delete
+        End If
+Next i
+
+'Deletes fiber column if all the fibers are the number 1
+'If bDeleteFiberCol = True Then Columns(2).Delete
+
+Done:
+    Exit Sub
+errhandler:
+    RaiseError Err.Number, Err.Source, "Module1.Rearrange2", Err.Description, Erl
+
+End Sub
+
+Public Sub ApplyCriteria()
+
+Dim lLastRow As Long
+Dim lLastCol As Long
+Dim lFirstIL As Long
+Dim lFirstInitial As Long
+Dim lLastInitial As Long
+Dim dbMaxIL As Double
+Dim dbMinRL As Double
+Dim dbMaxILChg As Double
+Dim dbMaxRLDecr As Double
+On Error GoTo errhandler
+
+lLastRow = Sheets(3).Cells(Rows.Count, 1).End(xlUp).Row
+lLastCol = Sheets(3).UsedRange.Columns.Count
+
+If Cells(lLastRow, 1) = "Sample" Then
+    ActiveSheet.Rows(lLastRow).Delete
+End If
+
+lLastRow = Sheets(3).Cells(Rows.Count, 1).End(xlUp).Row
+
+Set rng = Range(Cells(1, 1), Cells(lLastRow, lLastCol))
+
+'Pulls the specs written on first page
+dbMaxIL = ThisWorkbook.Sheets(1).Cells(3, 8).Value
+dbMinRL = ThisWorkbook.Sheets(1).Cells(3, 9).Value
+dbMaxILChg = ThisWorkbook.Sheets(1).Cells(3, 10).Value
+dbMaxRLDecr = ThisWorkbook.Sheets(1).Cells(3, 11).Value
+
+For i = 1 To lLastRow
+    If Cells(i, 1).Value = "Sample" Then
+        lFirstInitial = i + 1
+        Cells(lFirstInitial, 1).Select
+        If Cells(lFirstInitial + 1, 1).Value = "" Then
+            lLastInitial = lFirstInitial
+        Else
+            lLastInitial = Selection.End(xlDown).Row
+        End If
+        For k = 1 To lLastCol
+            'If the IL is above the spec, highlight red
+            If Cells(i, k).Value = "1310 IL" Then
+                Set rng = Range(Cells(lFirstInitial, k), Cells(lLastInitial, k + 3))
+                With rng.FormatConditions.Add(Type:=xlCellValue, Operator:=xlGreater, Formula1:=dbMaxIL & lHigh)
+                .Font.Color = rgbRed
+                End With
+            End If
+            
+            'If the RLA is above the spec, highlight red
+            If Cells(i, k).Value = "1310 RLA" Then
+                Set rng = Range(Cells(lFirstInitial, k), Cells(lLastInitial, k + 3))
+                With rng.FormatConditions.Add(Type:=xlCellValue, Operator:=xlGreater, Formula1:=-dbMinRL & lHigh)
+                .Font.Color = rgbRed
+                End With
+            End If
+                
+            If Cells(i, k).Value = "1310 RLB" Then
+                Set rng = Range(Cells(lFirstInitial, k), Cells(lLastInitial, k + 3))
+                With rng.FormatConditions.Add(Type:=xlCellValue, Operator:=xlGreater, Formula1:=-dbMinRL & lHigh)
+                .Font.Color = rgbRed
+                End With
+            End If
+                
+            If Cells(i, k).Value = "1310 RLC" Then
+                Set rng = Range(Cells(lFirstInitial, k), Cells(lLastInitial, k + 3))
+                With rng.FormatConditions.Add(Type:=xlCellValue, Operator:=xlGreater, Formula1:=-dbMinRL & lHigh)
+                .Font.Color = rgbRed
+                End With
+            End If
+            
+            'If the change in IL is above the spec, highlight red, if it's close to failing, highlight orange
+            If Cells(i, k).Value = "13 IL " & ChrW(916) Then
+                Set rng = Range(Cells(lFirstInitial, k), Cells(lLastInitial, k + 3))
+                With rng.FormatConditions.Add(Type:=xlCellValue, Operator:=xlNotBetween, Formula1:=-dbMaxILChg & lHigh, Formula2:=dbMaxILChg & lHigh)
+                .Font.Color = rgbRed
+                End With
+                'With Rng.FormatConditions.Add(Type:=xlCellValue, Operator:=xlGreater, Formula1:=dbMaxILchg * 0.95 & lHigh)
+                '.Interior.Color = rgbOrange
+                'End With
+            End If
+            
+            'If the change in RLA is above the spec, highlight red, if it's close to failing, highlight orange
+            If Cells(i, k).Value = "13 RL " & ChrW(916) Then
+                Set rng = Range(Cells(lFirstInitial, k), Cells(lLastInitial, k + 3))
+                With rng.FormatConditions.Add(Type:=xlCellValue, Operator:=xlGreater, Formula1:=dbMaxRLDecr & lHigh)
+                .Font.Color = rgbRed
+                End With
+                'With Rng.FormatConditions.Add(Type:=xlCellValue, Operator:=xlGreater, Formula1:=dbMaxRLDecr * 0.95 & lHigh)
+                '.Interior.Color = rgbOrange
+                'End With
+            End If
+        Next k
+    End If
+Next i
+
+
+For i = 1 To lLastRow
+    For k = 1 To lLastCol
+        If Cells(i, k).Value = "<-99" Or Cells(i, k).Value = "" Then
+            ThisWorkbook.Sheets(3).Cells(i, k).FormatConditions.Delete
+        End If
+    Next k
+Next i
+                       
+                    
+Done:
+    Exit Sub
+errhandler:
+    RaiseError Err.Number, Err.Source, "Module1.ApplyCriteria", Err.Description, Erl
+
+End Sub
+
+
+Public Sub SummaryAppearance()
+'Bolds, highlights, and changes font size of summary tab
+'to clean up the look of the data
+
+Dim lLastRow As Long
+Dim lLastCol As Long
+On Error GoTo errhandler
+
+lLastRow = Sheets("Summary").Cells(Rows.Count, 1).End(xlUp).Row
+lLastCol = Sheets("Summary").Cells(1, Columns.Count).End(xlToLeft).Column
+
+For i = 1 To lLastRow
+    If Cells(i, 1).Value = "Sample" Then
+        'Test format
+        Cells(i - 1, 1).Font.Bold = True
+        Cells(i - 1, 1).Font.Size = 12
+        Cells(i - 1, 1).HorizontalAlignment = xlLeft
+        
+        'Sample Row Format
+        For j = 1 To 26
+            If Cells(i, j).Value <> "" Then
+                Cells(i, j).Font.Bold = True
+                Cells(i, j).Interior.Color = RGB(207, 225, 255)
+                Cells(i, j).HorizontalAlignment = xlCenter
+            End If
+        Next j
+    End If
+    
+    If Cells(i, 1) = "Maximum Values" Then
+        For k = 1 To 26
+            If Cells(i, k).Value <> "" Then Cells(i, k).Font.Bold = True
+        Next k
+    End If
+Next
+
+Done:
+    Exit Sub
+errhandler:
+    RaiseError Err.Number, Err.Source, "Module1.SummaryAppearance", Err.Description, Erl
+
+End Sub
+
+
+Public Sub FormA()
+'Method B and H IL Splice Loss Correction
+
+Dim lLastRow As Long
+Dim lCountDUTRow As Long
+Dim lCutbackRowFirst As Long
+Dim lCutbackRowLast As Long
+Dim lFirstIL As Long
+Dim lDUTFirstRow As Long
+On Error GoTo errhandler
+
+lLastRow = Sheets("Summary").Cells(Rows.Count, 1).End(xlUp).Row
+
+'Loops through entire worksheet
+For i = 2 To lLastRow
+    lCountDUTRow = 0
+    lCutbackRowFirst = 0
+    lCutbackRowLast = 0
+    lDUTFirstRow = i
+    
+    'Determine how many DUT measurements there are
+    While InStr(1, (Cells(i, 1).Value), "Cut", vbTextCompare) = 0
+        If i <= lLastRow Then
+            lCountDUTRow = lCountDUTRow + 1
+            i = i + 1
+        Else
+            GoTo cntinue
+        End If
+    Wend
+    
+cntinue:
+    lCutbackRowFirst = i
+    'Determine last row of cutback data
+    While InStr(1, (Cells(i, 1).Value), "Cut", vbTextCompare) > 0
+        lCutbackRowLast = i
+        i = i + 1
+    Wend
+    
+    'The lFirstIL is in column 4 in the format the sheet is currently in
+    lFirstIL = 4
+    
+    'DUT IL = MDUTIL - Cutback
+    k = lCutbackRowFirst
+    For j = lDUTFirstRow To lCutbackRowFirst - 1 'From start of DUT measurements to the end
+        If Cells(j, 2).Value = Cells(k, 2).Value Then 'Checks for the same sample name
+            If Cells(j, 3).Value = Cells(k, 3).Value Then 'Checks for same fiber number
+                If Cells(j, lFirstIL).Value <> "" Then
+                    Cells(j, lFirstIL).Value = Cells(j, lFirstIL).Value - Cells(k, lFirstIL).Value '1310 IL
+                End If
+                If Cells(j, lFirstIL + 1).Value <> "" Then
+                    Cells(j, lFirstIL + 1).Value = Cells(j, lFirstIL + 1).Value - Cells(k, lFirstIL + 1).Value '1490 IL
+                End If
+                If Cells(j, lFirstIL + 2).Value <> "" Then
+                    Cells(j, lFirstIL + 2).Value = Cells(j, lFirstIL + 2).Value - Cells(k, lFirstIL + 2).Value '1550 IL
+                End If
+                If Cells(j, lFirstIL + 3).Value <> "" Then
+                    Cells(j, lFirstIL + 3).Value = Cells(j, lFirstIL + 3).Value - Cells(k, lFirstIL + 3).Value '1625 IL
+                End If
+                GoTo nextK
+            End If
+        Else 'Checks to see if cutback measurement is above DUT instead of below
+            For l = 2 To j - 1
+                If Cells(l, 2).Value = Cells(j, 2).Value Then 'Checks for the same sample name
+                    If Cells(l, 3).Value = Cells(j, 3).Value Then 'Checks for same fiber #
+                        If InStr(1, (Cells(l, 1).Value), "Cut", vbTextCompare) > 0 Then 'Checks l is a cutback
+                            If Cells(j, lFirstIL).Value <> "" Then
+                                Cells(j, lFirstIL).Value = Cells(j, lFirstIL).Value - Cells(l, lFirstIL).Value '1310 IL
+                            End If
+                            If Cells(j, lFirstIL + 1).Value <> "" Then
+                                Cells(j, lFirstIL + 1).Value = Cells(j, lFirstIL + 1).Value - Cells(l, lFirstIL + 1).Value '1490 IL
+                            End If
+                            If Cells(j, lFirstIL + 2).Value <> "" Then
+                                Cells(j, lFirstIL + 2).Value = Cells(j, lFirstIL + 2).Value - Cells(l, lFirstIL + 2).Value '1550 IL
+                            End If
+                            If Cells(j, lFirstIL + 3).Value <> "" Then
+                                Cells(j, lFirstIL + 3).Value = Cells(j, lFirstIL + 3).Value - Cells(l, lFirstIL + 3).Value '1625 IL
+                            End If
+                        End If
+                    End If
+                End If
+            Next l
+            GoTo nextK
+nextK:
+        If k >= lCutbackRowLast Then 'Loops around if there's multiple measurements to apply cutback to
+                k = lCutbackRowFirst
+        Else
+                k = k + 1
+        End If
+        
+        End If
+    Next j
+    i = i - 1 'Off by 1 error correction from a while loop above
+Next
+
+'MsgBox ("Cutback Applied.")
+
+Done:
+    Exit Sub
+errhandler:
+    RaiseError Err.Number, Err.Source, "Module1.FormA", Err.Description, Erl
+    
+    
+End Sub
+
+
+Public Sub FormB()
+'Method C and D IL and Reflectance Splice Loss Correction
+
+Dim lLastRow As Long
+Dim lCountDUTRow As Long
+Dim lCutbackRowFirst As Long
+Dim lCutbackRowLast As Long
+Dim lFirstIL As Long
+Dim lDUTFirstRow As Long
+Dim lFirstRL As Long
+Dim dbCutback13 As Double
+Dim dbCutback14 As Double
+Dim dbCutback15 As Double
+Dim dbCutback16 As Double
+Dim dbAdjDUTRefl13 As Double
+Dim dbAdjDUTRefl14 As Double
+Dim dbAdjDUTRefl15 As Double
+Dim dbAdjDUTRefl16 As Double
+Dim dbAdjDUTReflLin13 As Double
+Dim dbAdjDUTReflLin14 As Double
+Dim dbAdjDUTReflLin15 As Double
+Dim dbAdjDUTReflLin16 As Double
+Dim dbEstMFRefl13 As Double
+Dim dbEstMFRefl14 As Double
+Dim dbEstMFRefl15 As Double
+Dim dbEstMFRefl16 As Double
+Dim dbFReflDiff13 As Double
+Dim dbFReflDiff14 As Double
+Dim dbFReflDiff15 As Double
+Dim dbFReflDiff16 As Double
+On Error GoTo errhandler
+
+lLastRow = Sheets("Summary").Cells(Rows.Count, 1).End(xlUp).Row
+
+'Loops through entire worksheet
+For i = 2 To lLastRow
+    lCountDUTRow = 0
+    lCutbackRowFirst = 0
+    lCutbackRowLast = 0
+    lDUTFirstRow = i
+    
+    'Determine how many DUT measurements there are
+    While InStr(1, (Cells(i, 1).Value), "Cut", vbTextCompare) = 0
+        lCountDUTRow = lCountDUTRow + 1
+        i = i + 1
+    Wend
+    
+    lCutbackRowFirst = i
+    
+    'Determine last row of cutback data
+    While InStr(1, (Cells(i, 1).Value), "Cut", vbTextCompare) > 0
+        lCutbackRowLast = i
+        i = i + 1
+    Wend
+    
+    lFirstIL = 4
+    If bClickedRLA = True Then
+        lFirstRL = 16
+    ElseIf bClickedRLB = True Then
+        lFirstRL = 8
+    ElseIf bClickedRLC = True Then
+        lFirstRL = 12
+    End If
+    
+    'DUT IL = MDUTIL - Cutback
+    k = lCutbackRowFirst
+    For j = lDUTFirstRow To lCutbackRowFirst - 1 'From start of DUT measurements to the end
+        If Cells(j, 2).Value = Cells(k, 2).Value Then 'Checks for the same sample name
+            If Cells(j, 3).Value = Cells(k, 3).Value Then 'Checks for same fiber number
+            
+                If Cells(j, lFirstIL).Value <> "" Then
+                    Cells(j, lFirstIL).Value = Cells(j, lFirstIL).Value - Cells(k, lFirstIL).Value '1310 IL
+                End If
+                If Cells(j, lFirstIL + 1).Value <> "" Then
+                    Cells(j, lFirstIL + 1).Value = Cells(j, lFirstIL + 1).Value - Cells(k, lFirstIL + 1).Value '1490 IL
+                End If
+                If Cells(j, lFirstIL + 2).Value <> "" Then
+                    Cells(j, lFirstIL + 2).Value = Cells(j, lFirstIL + 2).Value - Cells(k, lFirstIL + 2).Value '1550 IL
+                End If
+                If Cells(j, lFirstIL + 3).Value <> "" Then
+                    Cells(j, lFirstIL + 3).Value = Cells(j, lFirstIL + 3).Value - Cells(k, lFirstIL + 3).Value '1625 IL
+                End If
+                
+                dbCutback13 = Cells(k, lFirstIL).Value
+                dbCutback14 = Cells(k, lFirstIL + 1).Value
+                dbCutback15 = Cells(k, lFirstIL + 2).Value
+                dbCutback16 = Cells(k, lFirstIL + 3).Value
+                
+                'The following formulas are used for each wavelength in the section below
+                'AdjDUTRefl = MDUTRefl + 2*Cutback
+                'AdjDUTReflLin = 10^(AdjDUTRefl/10)
+                'EstMFRefl = FReflConstants - 2*Cutback
+                'FReflDiff = 10^(FReflConstants/10) - 10^EstMFRefl/10)
+                
+                '1310 RL
+                If Cells(j, lFirstRL).Value <> "<-99" And Cells(j, lFirstRL).Value <> "" Then
+                    dbAdjDUTRefl13 = Cells(j, lFirstRL).Value + (2 * dbCutback13)
+                    dbAdjDUTReflLin13 = 10 ^ ((dbAdjDUTRefl13 / 10))
+                    dbEstMFRefl13 = -68.4 - (2 * Cells(k, lFirstIL).Value)
+                    dbFReflDiff13 = (10 ^ (-68.4 / 10)) - (10 ^ (dbEstMFRefl13 / 10))
+                End If
+                
+                '1490 RL
+                If Cells(j, lFirstRL + 1).Value <> "<-99" And Cells(j, lFirstRL + 1).Value <> "" Then
+                    dbAdjDUTRefl14 = Cells(j, lFirstRL + 1).Value + (2 * dbCutback14)
+                    dbAdjDUTReflLin14 = 10 ^ ((dbAdjDUTRefl14 / 10))
+                    dbEstMFRefl14 = -68.7 - (2 * Cells(k, lFirstIL + 1).Value)
+                    dbFReflDiff14 = (10 ^ (-68.7 / 10)) - (10 ^ (dbEstMFRefl14 / 10))
+                End If
+                
+                '1550 RL
+                If Cells(j, lFirstRL + 2).Value <> "<-99" And Cells(j, lFirstRL + 2).Value <> "" Then
+                    dbAdjDUTRefl15 = Cells(j, lFirstRL + 2).Value + (2 * dbCutback15)
+                    dbAdjDUTReflLin15 = 10 ^ ((dbAdjDUTRefl15 / 10))
+                    dbEstMFRefl15 = -70 - (2 * Cells(k, lFirstIL + 2).Value)
+                    dbFReflDiff15 = (10 ^ (-70 / 10)) - (10 ^ (dbEstMFRefl15 / 10))
+                End If
+                
+                '1625 RL
+                If Cells(j, lFirstRL + 3).Value <> "<-99" And Cells(j, lFirstRL + 3).Value <> "" Then
+                    dbAdjDUTRefl16 = Cells(j, lFirstRL + 3).Value + (2 * dbCutback16)
+                    dbAdjDUTReflLin16 = 10 ^ ((dbAdjDUTRefl16 / 10))
+                    dbEstMFRefl16 = -71.7 - (2 * Cells(k, lFirstIL + 3).Value)
+                    dbFReflDiff16 = (10 ^ (-71.7 / 10)) - (10 ^ (dbEstMFRefl16 / 10))
+                End If
+                
+                
+                'Corrected DUT Reflectance = 10*Log(AdjDUTReflLin + FReflDiff)
+                If dbCutback13 > 0 And dbAdjDUTReflLin13 + dbFReflDiff13 > 0 And Cells(j, lFirstRL).Value <> "<-99" And Cells(j, lFirstRL).Value <> "" Then 'can't take log of negative number
+                    Cells(j, lFirstRL).Value = 10 * (Log(dbAdjDUTReflLin13 + dbFReflDiff13) / Log(10))
+                End If
+                If dbCutback14 > 0 And dbAdjDUTReflLin14 + dbFReflDiff14 > 0 And Cells(j, lFirstRL + 1).Value <> "<-99" And Cells(j, lFirstRL + 1).Value <> "" Then
+                    Cells(j, lFirstRL + 1).Value = 10 * (Log(dbAdjDUTReflLin14 + dbFReflDiff14) / Log(10))
+                End If
+                If dbCutback15 > 0 And dbAdjDUTReflLin15 + dbFReflDiff15 > 0 And Cells(j, lFirstRL + 2).Value <> "<-99" And Cells(j, lFirstRL + 2).Value <> "" Then
+                    Cells(j, lFirstRL + 2).Value = 10 * (Log(dbAdjDUTReflLin15 + dbFReflDiff15) / Log(10))
+                End If
+                If dbCutback16 > 0 And dbAdjDUTReflLin16 + dbFReflDiff16 > 0 And Cells(j, lFirstRL + 3).Value <> "<-99" And Cells(j, lFirstRL + 3).Value <> "" Then
+                    Cells(j, lFirstRL + 3).Value = 10 * (Log(dbAdjDUTReflLin16 + dbFReflDiff16) / Log(10))
+                End If
+            GoTo nextK
+            End If
+        
+        Else 'Checks to see if cutback measurement is above DUT instead of below
+                For l = 2 To j - 1
+                    If Cells(l, 2).Value = Cells(j, 2).Value Then 'Checks for the same sample name
+                        If Cells(l, 3).Value = Cells(j, 3).Value Then 'Checks for same fiber #
+                            If InStr(1, (Cells(l, 1).Value), "Cut", vbTextCompare) > 0 Then 'Checks l is a cutback
+                                If Cells(j, lFirstIL).Value <> "" Then
+                                    Cells(j, lFirstIL).Value = Cells(j, lFirstIL).Value - Cells(l, lFirstIL).Value '1310 IL
+                                End If
+                                If Cells(j, lFirstIL + 1).Value <> "" Then
+                                    Cells(j, lFirstIL + 1).Value = Cells(j, lFirstIL + 1).Value - Cells(l, lFirstIL + 1).Value '1490 IL
+                                End If
+                                If Cells(j, lFirstIL + 2).Value <> "" Then
+                                    Cells(j, lFirstIL + 2).Value = Cells(j, lFirstIL + 2).Value - Cells(l, lFirstIL + 2).Value '1550 IL
+                                End If
+                                If Cells(j, lFirstIL + 3).Value <> "" Then
+                                    Cells(j, lFirstIL + 3).Value = Cells(j, lFirstIL + 3).Value - Cells(l, lFirstIL + 3).Value '1625 IL
+                                End If
+                                
+                                dbCutback13 = Cells(l, lFirstIL).Value
+                                dbCutback14 = Cells(l, lFirstIL + 1).Value
+                                dbCutback15 = Cells(l, lFirstIL + 2).Value
+                                dbCutback16 = Cells(l, lFirstIL + 3).Value
+                                
+                                'The following formulas are used for each wavelength in the section below
+                                'AdjDUTRefl = MDUTRefl + 2*Cutback
+                                'AdjDUTReflLin = 10^(AdjDUTRefl/10)
+                                'EstMFRefl = FReflConstants - 2*Cutback
+                                'FReflDiff = 10^(FReflConstants/10) - 10^EstMFRefl/10)
+                                
+                                '1310 RLA
+                                If Cells(j, lFirstRL).Value <> "<-99" And Cells(j, lFirstRL).Value <> "" Then
+                                    dbAdjDUTRefl13 = Cells(j, lFirstRL).Value + (2 * dbCutback13)
+                                    dbAdjDUTReflLin13 = 10 ^ ((dbAdjDUTRefl13 / 10))
+                                    dbEstMFRefl13 = -68.4 - (2 * Cells(l, lFirstIL).Value)
+                                    dbFReflDiff13 = (10 ^ (-68.4 / 10)) - (10 ^ (dbEstMFRefl13 / 10))
+                                End If
+                                
+                                '1490 RLA
+                                If Cells(j, lFirstRL + 1).Value <> "<-99" And Cells(j, lFirstRL + 1).Value <> "" Then
+                                    dbAdjDUTRefl14 = Cells(j, lFirstRL + 1).Value + (2 * dbCutback14)
+                                    dbAdjDUTReflLin14 = 10 ^ ((dbAdjDUTRefl14 / 10))
+                                    dbEstMFRefl14 = -68.7 - (2 * Cells(l, lFirstIL + 1).Value)
+                                    dbFReflDiff14 = (10 ^ (-68.7 / 10)) - (10 ^ (dbEstMFRefl14 / 10))
+                                End If
+                                
+                                '1550 RLA
+                                If Cells(j, lFirstRL + 2).Value <> "<-99" And Cells(j, lFirstRL + 2).Value <> "" Then
+                                    dbAdjDUTRefl15 = Cells(j, lFirstRL + 2).Value + (2 * dbCutback15)
+                                    dbAdjDUTReflLin15 = 10 ^ ((dbAdjDUTRefl15 / 10))
+                                    dbEstMFRefl15 = -70 - (2 * Cells(l, lFirstIL + 2).Value)
+                                    dbFReflDiff15 = (10 ^ (-70 / 10)) - (10 ^ (dbEstMFRefl15 / 10))
+                                End If
+                                
+                                '1625 RLA
+                                If Cells(j, lFirstRL + 3).Value <> "<-99" And Cells(j, lFirstRL + 3).Value <> "" Then
+                                    dbAdjDUTRefl16 = Cells(j, lFirstRL + 3).Value + (2 * dbCutback16)
+                                    dbAdjDUTReflLin16 = 10 ^ ((dbAdjDUTRefl16 / 10))
+                                    dbEstMFRefl16 = -71.7 - (2 * Cells(l, lFirstIL + 3).Value)
+                                    dbFReflDiff16 = (10 ^ (-71.7 / 10)) - (10 ^ (dbEstMFRefl16 / 10))
+                                End If
+                                
+                                
+                                'Corrected DUT Reflectance = 10*Log(AdjDUTReflLin + FReflDiff)
+                                If dbCutback13 > 0 And dbAdjDUTReflLin13 + dbFReflDiff13 > 0 And Cells(j, lFirstRL).Value <> "<-99" And Cells(j, lFirstRL).Value <> "" Then 'can't take log of negative number
+                                    Cells(j, lFirstRL).Value = 10 * (Log(dbAdjDUTReflLin13 + dbFReflDiff13) / Log(10))
+                                End If
+                                If dbCutback14 > 0 And dbAdjDUTReflLin14 + dbFReflDiff14 > 0 And Cells(j, lFirstRL + 1).Value <> "<-99" And Cells(j, lFirstRL + 1).Value <> "" Then
+                                    Cells(j, lFirstRL + 1).Value = 10 * (Log(dbAdjDUTReflLin14 + dbFReflDiff14) / Log(10))
+                                End If
+                                If dbCutback15 > 0 And dbAdjDUTReflLin15 + dbFReflDiff15 > 0 And Cells(j, lFirstRL + 2).Value <> "<-99" And Cells(j, lFirstRL + 2).Value <> "" Then
+                                    Cells(j, lFirstRL + 2).Value = 10 * (Log(dbAdjDUTReflLin15 + dbFReflDiff15) / Log(10))
+                                End If
+                                If dbCutback16 > 0 And dbAdjDUTReflLin16 + dbFReflDiff16 > 0 And Cells(j, lFirstRL + 3).Value <> "<-99" And Cells(j, lFirstRL + 3).Value <> "" Then
+                                    Cells(j, lFirstRL + 3).Value = 10 * (Log(dbAdjDUTReflLin16 + dbFReflDiff16) / Log(10))
+                                End If
+                            End If
+                        End If
+                    End If
+                Next l
+            GoTo nextK
+nextK:
+            'Loops around if there's multiple measurements to apply cutback to, if not, it increments k
+            If k >= lCutbackRowLast Then
+                k = lCutbackRowFirst
+            Else
+                k = k + 1
+            End If
+        End If
+    Next j
+    i = i - 1 'Off by 1 error correction from a while loop above
+Next
+
+'MsgBox ("Cutback Applied.")
+
+Done:
+    Exit Sub
+errhandler:
+    RaiseError Err.Number, Err.Source, "Module1.FormB", Err.Description, Erl
+
+End Sub
+
+Public Sub FormD()
+Dim lLastRow As Long
+Dim lFirstIL As Long
+Dim lC1Row As Long
+Dim lC3Row As Long
+Dim lCutbackRow As Long
+Dim jIncr As Long
+Dim kIncr As Long
+Dim lIncr As Long
+On Error GoTo errhandler
+
+lLastRow = Sheets("Summary").Cells(Rows.Count, 1).End(xlUp).Row
+jIncr = 1
+kIncr = 2
+lIncr = 3
+
+For i = 1 To lLastRow 'Look for C1/C2
+    For j = jIncr To lLastRow
+        If InStr(1, (Cells(j, 1).Value), "C1", vbTextCompare) > 0 Then
+            lC1Row = j
+       
+            GoTo nxtK
+        End If
+    Next j
+nxtK:
+    For k = kIncr To lLastRow 'Look for C3/C4
+        If InStr(1, (Cells(k, 1).Value), "C3", vbTextCompare) > 0 Then
+            lC3Row = k
+            GoTo nxtL
+        End If
+    Next k
+nxtL:
+    For l = lIncr To lLastRow 'Look for cutback
+        If InStr(1, (Cells(l, 1).Value), "Cut", vbTextCompare) > 0 Then
+            lCutbackRow = l
+            Exit For
+        End If
+    Next l
+    
+    If Cells(l, 2).Value = Cells(k, 2).Value Then 'Checks for the same sample name
+        If Cells(l, 3).Value = Cells(k, 3).Value Then 'Checks for same fiber number
+                If Cells(k, 4).Value <> "" Then
+                    Cells(k, 4).Value = Cells(k, 4).Value - Cells(j, 4).Value - Cells(l, 4).Value '1310 IL
+                End If
+                If Cells(k, 5).Value <> "" Then
+                    Cells(k, 5).Value = Cells(k, 5).Value - Cells(j, 5).Value - Cells(l, 5).Value '1490 IL
+                End If
+                If Cells(k, 6).Value <> "" Then
+                    Cells(k, 6).Value = Cells(k, 6).Value - Cells(j, 6).Value - Cells(l, 6).Value '1550 IL
+                End If
+                If Cells(k, 7).Value <> "" Then
+                    Cells(k, 7).Value = Cells(k, 7).Value - Cells(j, 7).Value - Cells(l, 7).Value '1625 IL
+                End If
+        End If
+    End If
+    
+    jIncr = j + 2
+    kIncr = k + 2
+    lIncr = l + 2
+    i = jIncr
+Next i
+        
+
+Done:
+    Exit Sub
+errhandler:
+    RaiseError Err.Number, Err.Source, "Module1.FormD", Err.Description, Erl
+    
+    
+End Sub
+
+Public Sub SortByDate()
+'Sorts the raw data by date and time
+
+Dim rSortRange As Range
+Dim ws As Worksheet
+Dim lLastRow As Long
+On Error GoTo errhandler
+
+lLastRow = Sheets("Raw Data").Cells(Rows.Count, 1).End(xlUp).Row
+Set ws = Sheets("Raw Data")
+Set rSortRange = ws.Range(Cells(1, 29), Cells(lLastRow, 29))
+
+    Sheets("Raw Data").Range("AC1").Select
+    ActiveWorkbook.Worksheets("Raw Data").Sort.SortFields.Add2 Key:=rSortRange, SortOn:=xlSortOnValues, Order:=xlAscending, DataOption:= _
+        xlSortNormal
+    With ActiveWorkbook.Worksheets("Raw Data").Sort
+        .SetRange Range(Cells(1, 1), Cells(lLastRow, 33))
+        .Header = xlYes
+        .MatchCase = False
+        .Orientation = xlTopToBottom
+        .SortMethod = xlPinYin
+        .Apply
+    End With
+
+Done:
+    Exit Sub
+errhandler:
+    RaiseError Err.Number, Err.Source, "Module1.SortByDate", Err.Description, Erl
+
+End Sub
+
+Public Sub MaxRow()
+'This sub finds the maximum of each wavelength for each set of tests
+'and puts it in the row below the bottom of the set of tests
+
+Dim lLastCol As Long
+Dim lFirstIL As Long
+Dim ws As Worksheet
+Set ws = ThisWorkbook.Sheets("Summary")
+Dim dbMyMax As Double
+Dim lLastRow As Long
+Dim lCountRows As Long
+Dim lDataSetFirstRow As Long
+Dim lDataSetLastRow As Long
+Dim lMaxLabel As Long
+Dim lCounter As Long
+On Error GoTo errhandler
+
+lLastRow = Sheets("Summary").Cells(Rows.Count, 1).End(xlUp).Row
+lLastCol = Sheets(3).Cells(3, Columns.Count).End(xlToLeft).Column
+
+If Cells(3, 2) = "Fiber" Then
+    lFirstIL = 4
+    lMaxLabel = 3
+Else
+    lFirstIL = 3
+    lMaxLabel = 2
+End If
+
+lCounter = 2
+'Determine first and last row of each data set
+For i = 2 To lLastRow + 1
+    For k = lCounter To lLastRow
+        If InStr(1, (Cells(k, 1).Value), "Sample") > 0 Then
+            lDataSetFirstRow = k + 1
+            GoTo cntinue
+        End If
+    Next k
+cntinue:
+        Cells(lDataSetFirstRow, 1).Select
+        If Cells(lDataSetFirstRow + 1, 1).Value <> "" Then
+            lDataSetLastRow = Selection.End(xlDown).Row
+        Else
+            lDataSetLastRow = lDataSetFirstRow
+        End If
+        
+        'Add in a new row and label it maximum values
+        Sheets("Summary").Rows(lDataSetLastRow + 1).Insert
+        Sheets("Summary").Rows(lDataSetLastRow + 1).FormatConditions.Delete
+        Sheets("Summary").Cells(lDataSetLastRow + 1, 1).Value = "Maximum Values"
+        
+        'Finds maximum for each wavelength for each set of tests and puts it in the new row
+        For j = lFirstIL To 23
+            If lDataSetFirstRow <> lDataSetLastRow Then
+                dbMyMax = Application.WorksheetFunction.Max(ws.Range(Cells(lDataSetFirstRow, j), Cells(lDataSetLastRow, j)))
+            Else
+                dbMyMax = Cells(lDataSetFirstRow, j).Value
+            End If
+            
+            If WorksheetFunction.CountA(ws.Range(Cells(lDataSetFirstRow, j), Cells(lDataSetLastRow, j))) > 0 And lDataSetLastRow <= lLastRow Then
+                Sheets("Summary").Cells(lDataSetLastRow + 1, j).Value = dbMyMax
+            ElseIf WorksheetFunction.CountA(ws.Range(Cells(lDataSetFirstRow, j), Cells(lDataSetLastRow, j))) > 0 Then
+                Sheets("Summary").Cells(lLastRow, j).Value = dbMyMax
+            End If
+        Next j
+        
+        If lDataSetLastRow <= lLastRow Then
+                lLastRow = Sheets("Summary").Cells(Rows.Count, 1).End(xlUp).Row
+        Else
+            Exit Sub
+        End If
+        lCounter = lDataSetLastRow + 1
+        If lCounter = lLastRow Then Exit Sub
+Next i
+
+Done:
+    Exit Sub
+errhandler:
+    RaiseError Err.Number, Err.Source, "Module1.MaxRow", Err.Description, Erl
+
+
+End Sub
+
+
+
+' Reraises an error and adds line number and current procedure name
+Public Sub RaiseError(ByVal errorNo As Long _
+                , ByVal src As String _
+                , ByVal proc As String _
+                , ByVal desc As String _
+                , ByVal lineNo As Long)
+
+    Dim strSource As String
+
+    ' If called for the first time then add line number
+    If bAlreadyUsed = False Then
+        
+        ' Add error line number if present
+        If lineNo <> 0 Then
+            strSource = vbNewLine & LINE_NO_TEXT & lineNo & " "
+        End If
+
+        ' Add procedure to source
+        strSource = strSource & vbNewLine & proc
+        bAlreadyUsed = True
+        
+    Else
+        ' If error has already been raised simply add on procedure name
+        strSource = src & vbNewLine & proc
+    End If
+    
+    ' Pause the code here when debugging
+    '(To Debug: "Tools->VBA Properties" from the menu.
+    ' Add "Debugging=1" to the     ' "Conditional Compilation Arguments.)
+    #If Debugging = 1 Then
+       ' Debug.Assert False
+    #End If
+
+    ' Reraise the error so it will be caught in the caller procedure
+    ' (Note: If the code stops here, make sure DisplayError has been
+    ' placed in the topmost procedure)
+    Err.Raise errorNo, strSource, desc
+
+End Sub
+
+' Displays the error when it reaches the topmost sub
+' Note: You can add a call to logging from this sub
+Public Sub DisplayError(ByVal src As String, ByVal desc As String _
+                    , ByVal sProcname As String, lineNo As Long)
+
+    ' Check If the error happens in topmost sub
+    If bAlreadyUsed = False Then
+        ' Reset string to remove "VBAProject" and add line number if it exists
+        src = IIf(lineNo = 0, "", vbNewLine & LINE_NO_TEXT & lineNo)
+    End If
+
+    ' Build the final message
+    Dim sMsg As String
+    sMsg = "The following error occurred: " & vbNewLine & Err.Description _
+                    & vbNewLine & vbNewLine & "Error Location is: "
+    sMsg = sMsg & src & vbNewLine & sProcname
+
+    ' Display the message
+    MsgBox sMsg, Title:="Error"
+
+    ' reset the boolean value
+    bAlreadyUsed = False
+
+End Sub
+
+
+
+Public Sub SummTables()
+'Creates summary tables for each set of tests in the data with max IL, IL chg, RL chg, and mean IL and min RL
+
+Dim lLastRow As Long
+Dim lLastTableRow As Long
+Dim lLastCol As Long
+Dim lTestCount As Long
+Dim lJIncr As Long
+Dim lKIncr As Long
+Dim lFirstIL As Long
+Dim l13ILRow As Long
+Dim db13ILVal As Variant
+Dim l14ILRow As Long
+Dim db14ILVal As Variant
+Dim l15ILRow As Long
+Dim db15ILVal As Variant
+Dim l16ILRow As Long
+Dim db16ILVal As Variant
+Dim db13ILIncr As Variant
+Dim db14ILIncr As Variant
+Dim db15ILIncr As Variant
+Dim db16ILIncr As Variant
+Dim db13RL As Variant
+Dim db14RL As Variant
+Dim db15RL As Variant
+Dim db16RL As Variant
+Dim db13RLChg As Variant
+Dim db14RLChg As Variant
+Dim db15RLChg As Variant
+Dim db16RLChg As Variant
+Dim db13ILMean As Variant
+Dim db14ILMean As Variant
+Dim db15ILMean As Variant
+Dim db16ILMean As Variant
+
+Dim var13ILChg As Variant
+Dim var14ILChg As Variant
+Dim var15ILChg As Variant
+Dim var16ILChg As Variant
+Dim varMax As Variant
+Dim varMin As Variant
+
+
+On Error GoTo errhandler
+
+
+lLastRow = Sheets("Summary").Cells(Rows.Count, 1).End(xlUp).Row
+lLastCol = Sheets("Summary").Cells(3, Columns.Count).End(xlToLeft).Column
+
+lTestCount = 0
+'Find how many tests there are
+For i = 1 To lLastRow
+    If Sheets("Summary").Cells(i, 1).Value = "Sample" Then
+        lTestCount = lTestCount + 1
+    End If
+Next i
+
+'Paste the correct number of tables in
+For i = 1 To lTestCount - 1
+    Sheets("Tables").Range("A3:F9").Copy
+    With Sheets("Tables").Range("A" & Rows.Count).End(xlUp).Offset(4)
+        .PasteSpecial Paste:=xlPasteValues
+        .PasteSpecial Paste:=xlPasteFormats
+    End With
+Next i
+
+lLastTableRow = Sheets("Tables").Cells(Rows.Count, 1).End(xlUp).Row
+lJIncr = 1
+'Paste Test Descriptions
+For i = 1 To lLastRow
+    If Sheets("Summary").Cells(i, 1).Value = "Sample" Then
+        Sheets("Summary").Cells(i - 1, 1).Copy
+        Sheets("Tables").Activate
+        For j = lJIncr To lLastTableRow
+            If Sheets("Tables").Cells(j, 1) = "Max IL" Then
+                Sheets("Tables").Cells(j - 2, 1).PasteSpecial
+                lJIncr = j + 6
+                GoTo nxtI
+            End If
+        Next j
+    End If
+nxtI:
+Next i
+
+If Sheets("Summary").Cells(3, 2) = "Fiber" Then
+    lFirstIL = 4
+Else
+    lFirstIL = 3
+End If
+
+'Paste Max IL, Max IL Change, Min RL, and Max RL Change
+lKIncr = 1
+For i = 1 To lLastRow
+    If Sheets("Summary").Cells(i, 1).Value = "Sample" Then
+        lLastCol = Sheets("Summary").Cells(i, Columns.Count).End(xlToLeft).Column
+        
+        For j = lFirstIL To lLastCol
+            'Find max IL, mean IL and max IL Change for each wavelength
+            If Sheets("Summary").Cells(i, j).Value = "13 IL" Then
+                l13ILRow = Sheets("Summary").Cells(i, 1).End(xlDown).Row
+                db13ILVal = Sheets("Summary").Cells(l13ILRow, j).Value
+                If WorksheetFunction.CountA(Sheets("Summary").Range(Sheets("Summary").Cells(i + 1, j), Sheets("Summary").Cells(l13ILRow - 1, j))) > 1 Then
+                    db13ILMean = Application.WorksheetFunction.Average(Sheets("Summary").Range(Sheets("Summary").Cells(i + 1, j), Sheets("Summary").Cells(l13ILRow - 1, j)))
+                End If
+            End If
+            If Sheets("Summary").Cells(i, j).Value = "14 IL" Then
+                l14ILRow = Sheets("Summary").Cells(i, 1).End(xlDown).Row
+                db14ILVal = Sheets("Summary").Cells(l14ILRow, j).Value
+                If WorksheetFunction.CountA(Sheets("Summary").Range(Sheets("Summary").Cells(i + 1, j), Sheets("Summary").Cells(l14ILRow - 1, j))) > 1 Then
+                    db14ILMean = Application.WorksheetFunction.Average(Sheets("Summary").Range(Sheets("Summary").Cells(i + 1, j), Sheets("Summary").Cells(l14ILRow - 1, j)))
+                End If
+            End If
+            If Sheets("Summary").Cells(i, j).Value = "15 IL" Then
+                l15ILRow = Sheets("Summary").Cells(i, 1).End(xlDown).Row
+                db15ILVal = Sheets("Summary").Cells(l15ILRow, j).Value
+                If WorksheetFunction.CountA(Sheets("Summary").Range(Sheets("Summary").Cells(i + 1, j), Sheets("Summary").Cells(l15ILRow - 1, j))) > 1 Then
+                    db15ILMean = Application.WorksheetFunction.Average(Sheets("Summary").Range(Sheets("Summary").Cells(i + 1, j), Sheets("Summary").Cells(l15ILRow - 1, j)))
+                End If
+            End If
+            If Sheets("Summary").Cells(i, j).Value = "16 IL" Then
+                l16ILRow = Sheets("Summary").Cells(i, 1).End(xlDown).Row
+                db16ILVal = Sheets("Summary").Cells(l16ILRow, j).Value
+                If WorksheetFunction.CountA(Sheets("Summary").Range(Sheets("Summary").Cells(i + 1, j), Sheets("Summary").Cells(l16ILRow - 1, j))) > 1 Then
+                    db16ILMean = Application.WorksheetFunction.Average(Sheets("Summary").Range(Sheets("Summary").Cells(i + 1, j), Sheets("Summary").Cells(l16ILRow - 1, j)))
+                End If
+            End If
+            
+            'Find max IL increase for each wavelength
+            If Sheets("Summary").Cells(i, j).Value = "13 IL " & ChrW(916) Then
+                db13ILIncr = Sheets("Summary").Cells(l13ILRow, j).Value
+                If WorksheetFunction.CountA(Sheets("Summary").Range(Sheets("Summary").Cells(i + 1, j), Sheets("Summary").Cells(l13ILRow - 1, j))) > 1 Then
+                    varMax = Application.WorksheetFunction.Max(Sheets("Summary").Range(Sheets("Summary").Cells(i + 1, j), Sheets("Summary").Cells(l13ILRow - 1, j)))
+                    varMin = Application.WorksheetFunction.Min(Sheets("Summary").Range(Sheets("Summary").Cells(i + 1, j), Sheets("Summary").Cells(l13ILRow - 1, j)))
+                    If varMax >= Abs(varMin) Then
+                        var13ILChg = varMax
+                    Else
+                        var13ILChg = Abs(varMin)
+                    End If
+                    varMax = ""
+                    varMin = ""
+                End If
+            End If
+            If Sheets("Summary").Cells(i, j).Value = "14 IL " & ChrW(916) Then
+                db14ILIncr = Sheets("Summary").Cells(l14ILRow, j).Value
+                If WorksheetFunction.CountA(Sheets("Summary").Range(Sheets("Summary").Cells(i + 1, j), Sheets("Summary").Cells(l14ILRow - 1, j))) > 1 Then
+                    varMax = Application.WorksheetFunction.Max(Sheets("Summary").Range(Sheets("Summary").Cells(i + 1, j), Sheets("Summary").Cells(l14ILRow - 1, j)))
+                    varMin = Application.WorksheetFunction.Min(Sheets("Summary").Range(Sheets("Summary").Cells(i + 1, j), Sheets("Summary").Cells(l14ILRow - 1, j)))
+                    If varMax >= Abs(varMin) Then
+                        var14ILChg = varMax
+                    Else
+                        var14ILChg = Abs(varMin)
+                    End If
+                    varMax = ""
+                    varMin = ""
+                End If
+            End If
+            If Sheets("Summary").Cells(i, j).Value = "15 IL " & ChrW(916) Then
+                db15ILIncr = Sheets("Summary").Cells(l15ILRow, j).Value
+                 If WorksheetFunction.CountA(Sheets("Summary").Range(Sheets("Summary").Cells(i + 1, j), Sheets("Summary").Cells(l15ILRow - 1, j))) > 1 Then
+                    varMax = Application.WorksheetFunction.Max(Sheets("Summary").Range(Sheets("Summary").Cells(i + 1, j), Sheets("Summary").Cells(l15ILRow - 1, j)))
+                    varMin = Application.WorksheetFunction.Min(Sheets("Summary").Range(Sheets("Summary").Cells(i + 1, j), Sheets("Summary").Cells(l15ILRow - 1, j)))
+                    If varMax >= Abs(varMin) Then
+                        var15ILChg = varMax
+                    Else
+                        var15ILChg = Abs(varMin)
+                    End If
+                    varMax = ""
+                    varMin = ""
+                End If
+            End If
+            If Sheets("Summary").Cells(i, j).Value = "16 IL " & ChrW(916) Then
+                db16ILIncr = Sheets("Summary").Cells(l16ILRow, j).Value
+                If WorksheetFunction.CountA(Sheets("Summary").Range(Sheets("Summary").Cells(i + 1, j), Sheets("Summary").Cells(l16ILRow - 1, j))) > 1 Then
+                    varMax = Application.WorksheetFunction.Max(Sheets("Summary").Range(Sheets("Summary").Cells(i + 1, j), Sheets("Summary").Cells(l16ILRow - 1, j)))
+                    varMin = Application.WorksheetFunction.Min(Sheets("Summary").Range(Sheets("Summary").Cells(i + 1, j), Sheets("Summary").Cells(l16ILRow - 1, j)))
+                    If varMax >= Abs(varMin) Then
+                        var16ILChg = varMax
+                    Else
+                        var16ILChg = Abs(varMin)
+                    End If
+                    varMax = ""
+                    varMin = ""
+                End If
+            End If
+            
+            'Find min RL for each wavelength
+            If Sheets("Summary").Cells(i, j).Value = "13 RLA" Or Sheets("Summary").Cells(i, j).Value = "13 RLB" Or Sheets("Summary").Cells(i, j).Value = "13 RLC" Then
+                db13RL = Sheets("Summary").Cells(l13ILRow, j).Value
+            End If
+            If Sheets("Summary").Cells(i, j).Value = "14 RLA" Or Sheets("Summary").Cells(i, j).Value = "14 RLB" Or Sheets("Summary").Cells(i, j).Value = "14 RLC" Then
+                db14RL = Sheets("Summary").Cells(l14ILRow, j).Value
+            End If
+            If Sheets("Summary").Cells(i, j).Value = "15 RLA" Or Sheets("Summary").Cells(i, j).Value = "15 RLB" Or Sheets("Summary").Cells(i, j).Value = "15 RLC" Then
+                db15RL = Sheets("Summary").Cells(l15ILRow, j).Value
+            End If
+            If Sheets("Summary").Cells(i, j).Value = "16 RLA" Or Sheets("Summary").Cells(i, j).Value = "16 RLB" Or Sheets("Summary").Cells(i, j).Value = "16 RLC" Then
+                db16RL = Sheets("Summary").Cells(l16ILRow, j).Value
+            End If
+            
+            'Find max RL decrease for each wavelength
+            If Sheets("Summary").Cells(i, j).Value = "13 RL " & ChrW(916) Then
+                If Sheets("Summary").Cells(l13ILRow, j).Value >= 0 Then
+                    db13RLChg = Sheets("Summary").Cells(l13ILRow, j).Value
+                Else
+                    db13RLChg = 0
+                End If
+            End If
+            If Sheets("Summary").Cells(i, j).Value = "14 RL " & ChrW(916) Then
+                If Sheets("Summary").Cells(l14ILRow, j).Value >= 0 Then
+                    db14RLChg = Sheets("Summary").Cells(l14ILRow, j).Value
+                Else
+                    db14RLChg = 0
+                End If
+            End If
+            If Sheets("Summary").Cells(i, j).Value = "15 RL " & ChrW(916) Then
+                If Sheets("Summary").Cells(l15ILRow, j).Value >= 0 Then
+                    db15RLChg = Sheets("Summary").Cells(l15ILRow, j).Value
+                Else
+                    db15RLChg = 0
+                End If
+            End If
+            If Sheets("Summary").Cells(i, j).Value = "16 RL " & ChrW(916) Then
+                If Sheets("Summary").Cells(l16ILRow, j).Value >= 0 Then
+                    db16RLChg = Sheets("Summary").Cells(l16ILRow, j).Value
+                Else
+                    db16RLChg = 0
+                End If
+            End If
+        Next j
+            
+        Sheets("Tables").Activate
+        For k = lKIncr To lLastTableRow
+            If Sheets("Tables").Cells(k, 1) = "Max IL" Then
+                'Paste Max IL's
+                If db13ILVal <> "" Then
+                    Sheets("Tables").Cells(k, 2).Value = db13ILVal
+                End If
+                If db14ILVal <> "" Then
+                    Sheets("Tables").Cells(k, 3).Value = db14ILVal
+                End If
+                If db15ILVal <> "" Then
+                    Sheets("Tables").Cells(k, 4).Value = db15ILVal
+                End If
+                If db16ILVal <> "" Then
+                    Sheets("Tables").Cells(k, 5).Value = db16ILVal
+                End If
+                If Application.WorksheetFunction.CountA(Sheets("Tables").Range(Cells(k, 2), Cells(k, 5))) > 0 Then
+                    Sheets("Tables").Cells(k, 6).Value = Application.WorksheetFunction.Max(Sheets("Tables").Range(Cells(k, 2), Cells(k, 5)))
+                End If
+                
+                'Paste Mean IL's
+                If db13ILMean <> "" Then
+                    Sheets("Tables").Cells(k + 1, 2).Value = db13ILMean
+                End If
+                If db14ILMean <> "" Then
+                    Sheets("Tables").Cells(k + 1, 3).Value = db14ILMean
+                End If
+                If db15ILMean <> "" Then
+                    Sheets("Tables").Cells(k + 1, 4).Value = db15ILMean
+                End If
+                If db16ILMean <> "" Then
+                    Sheets("Tables").Cells(k + 1, 5).Value = db16ILMean
+                End If
+                If Application.WorksheetFunction.CountA(Sheets("Tables").Range(Cells(k + 1, 2), Cells(k + 1, 5))) > 0 Then
+                    Sheets("Tables").Cells(k + 1, 6).Value = Application.WorksheetFunction.Average(Sheets("Tables").Range(Cells(k + 1, 2), Cells(k + 1, 5)))
+                End If
+                
+                'Paste Max IL Increases
+                If db13ILIncr <> "" Then
+                    Sheets("Tables").Cells(k + 2, 2).Value = db13ILIncr
+                End If
+                If db14ILIncr <> "" Then
+                    Sheets("Tables").Cells(k + 2, 3).Value = db14ILIncr
+                End If
+                If db15ILIncr <> "" Then
+                    Sheets("Tables").Cells(k + 2, 4).Value = db15ILIncr
+                End If
+                If db16ILIncr <> "" Then
+                    Sheets("Tables").Cells(k + 2, 5).Value = db16ILIncr
+                End If
+                If Application.WorksheetFunction.CountA(Sheets("Tables").Range(Cells(k + 2, 2), Cells(k + 2, 5))) > 0 Then
+                    Sheets("Tables").Cells(k + 2, 6).Value = Application.WorksheetFunction.Max(Sheets("Tables").Range(Cells(k + 2, 2), Cells(k + 2, 5)))
+                End If
+                
+                'Paste IL Changes
+                If var13ILChg <> "" Then
+                    Sheets("Tables").Cells(k + 3, 2).Value = var13ILChg
+                    Sheets("Tables").Cells(k + 3, 2).NumberFormat = "0.00"
+                End If
+                If var14ILChg <> "" Then
+                    Sheets("Tables").Cells(k + 3, 3).Value = var14ILChg
+                    Sheets("Tables").Cells(k + 3, 3).NumberFormat = "0.00"
+                End If
+                If var15ILChg <> "" Then
+                    Sheets("Tables").Cells(k + 3, 4).Value = var15ILChg
+                    Sheets("Tables").Cells(k + 3, 4).NumberFormat = "0.00"
+                End If
+                If var16ILChg <> "" Then
+                    Sheets("Tables").Cells(k + 3, 5).Value = var16ILChg
+                    Sheets("Tables").Cells(k + 3, 5).NumberFormat = "0.00"
+                End If
+                If Application.WorksheetFunction.CountA(Sheets("Tables").Range(Cells(k + 3, 2), Cells(k + 3, 5))) > 0 Then
+                    Sheets("Tables").Cells(k + 3, 6).Value = Application.WorksheetFunction.Max(Sheets("Tables").Range(Cells(k + 3, 2), Cells(k + 3, 5)))
+                    Sheets("Tables").Cells(k + 3, 6).NumberFormat = "0.00"
+                End If
+                
+                'Paste Min RL's
+                If db13RL <> "" Then
+                    Sheets("Tables").Cells(k + 4, 2).Value = db13RL
+                    Sheets("Tables").Cells(k + 4, 2).NumberFormat = "0.0"
+                End If
+                If db14RL <> "" Then
+                    Sheets("Tables").Cells(k + 4, 3).Value = db14RL
+                    Sheets("Tables").Cells(k + 4, 3).NumberFormat = "0.0"
+                End If
+                If db15RL <> "" Then
+                    Sheets("Tables").Cells(k + 4, 4).Value = db15RL
+                    Sheets("Tables").Cells(k + 4, 4).NumberFormat = "0.0"
+                End If
+                If db16RL <> "" Then
+                    Sheets("Tables").Cells(k + 4, 5).Value = db16RL
+                    Sheets("Tables").Cells(k + 4, 5).NumberFormat = "0.0"
+                End If
+                If Application.WorksheetFunction.CountA(Sheets("Tables").Range(Cells(k + 4, 2), Cells(k + 4, 5))) > 0 Then
+                    Sheets("Tables").Cells(k + 4, 6).Value = Application.WorksheetFunction.Max(Sheets("Tables").Range(Cells(k + 4, 2), Cells(k + 4, 5)))
+                    Sheets("Tables").Cells(k + 4, 6).NumberFormat = "0.0"
+                End If
+                
+                'Paste Max RL Changes
+                If db13RLChg <> "" Then
+                    Sheets("Tables").Cells(k + 5, 2).Value = db13RLChg
+                End If
+                If db14RLChg <> "" Then
+                    Sheets("Tables").Cells(k + 5, 3).Value = db14RLChg
+                End If
+                If db15RLChg <> "" Then
+                    Sheets("Tables").Cells(k + 5, 4).Value = db15RLChg
+                End If
+                If db16RLChg <> "" Then
+                    Sheets("Tables").Cells(k + 5, 5).Value = db16RLChg
+                End If
+                If Application.WorksheetFunction.CountA(Sheets("Tables").Range(Cells(k + 5, 2), Cells(k + 5, 5))) > 0 Then
+                    Sheets("Tables").Cells(k + 5, 6).Value = Application.WorksheetFunction.Max(Sheets("Tables").Range(Cells(k + 5, 2), Cells(k + 5, 5)))
+                End If
+                lKIncr = k + 6
+                GoTo nextI
+            End If
+        Next k
+    End If
+nextI:
+'Resets the variables for the next loop
+db13ILVal = ""
+db14ILVal = ""
+db15ILVal = ""
+db16ILVal = ""
+db13ILMean = ""
+db14ILMean = ""
+db15ILMean = ""
+db16ILMean = ""
+db13ILIncr = ""
+db14ILIncr = ""
+db15ILIncr = ""
+db16ILIncr = ""
+db13RL = ""
+db14RL = ""
+db15RL = ""
+db16RL = ""
+db13RLChg = ""
+db14RLChg = ""
+db15RLChg = ""
+db16RLChg = ""
+var13ILChg = ""
+var14ILChg = ""
+var15ILChg = ""
+var16ILChg = ""
+Next i
+
+For i = 1 To lLastTableRow
+    If Sheets("Tables").Cells(i, 1).Value = "Max IL" Then
+        Cells(i, 2).Font.Bold = False
+        Cells(i, 3).Font.Bold = False
+        Cells(i, 4).Font.Bold = False
+        Cells(i, 5).Font.Bold = False
+    End If
+Next i
+
+'Delete any empty rows at the end?? In case of less wavelengths
+'Use countA() to avoid counting strings for this
+
+Done:
+    Exit Sub
+errhandler:
+    RaiseError Err.Number, Err.Source, "Module1.SummTables", Err.Description, Erl
+
+End Sub
+
+
+Public Sub ApplyCriteriaSummTables()
+
+Dim lLastRow As Long
+Dim lLastCol As Long
+Dim lFirstIL As Long
+Dim lFirstVal As Long
+Dim lLastVal As Long
+Dim dbMaxIL As Double
+Dim dbMinRL As Double
+Dim dbMaxILChg As Double
+Dim dbMaxRLDecr As Double
+Dim dbILIncrease As Double
+Dim dbMeanIL As Double
+On Error GoTo errhandler
+
+lLastRow = Sheets("Tables").Cells(Rows.Count, 1).End(xlUp).Row
+lLastCol = Sheets("Tables").UsedRange.Columns.Count
+
+Set rng = Range(Cells(1, 1), Cells(lLastRow, lLastCol))
+
+'Pulls the specs written on first page
+dbMaxIL = ThisWorkbook.Sheets(1).Cells(3, 8).Value
+dbMinRL = ThisWorkbook.Sheets(1).Cells(3, 9).Value
+dbMaxILChg = ThisWorkbook.Sheets(1).Cells(3, 10).Value
+dbMaxRLDecr = ThisWorkbook.Sheets(1).Cells(3, 11).Value
+dbILIncrease = ThisWorkbook.Sheets(1).Cells(3, 12).Value
+dbMeanIL = ThisWorkbook.Sheets(1).Cells(3, 13).Value
+lFirstVal = 2
+lLastVal = 6
+
+For i = 1 To lLastRow
+        'If the IL is above the spec, highlight red
+        If Cells(i, 1).Value = "Max IL" Then
+            Set rng = Range(Cells(i, lFirstVal), Cells(i, lLastVal))
+            With rng.FormatConditions.Add(Type:=xlCellValue, Operator:=xlGreater, Formula1:=dbMaxIL & lHigh)
+            .Font.Color = rgbRed
+            End With
+        End If
+            
+            'If the RLA is above the spec, highlight red
+        If Cells(i, 1).Value = "Mean IL" Then
+            Set rng = Range(Cells(i, lFirstVal), Cells(i, lLastVal))
+            With rng.FormatConditions.Add(Type:=xlCellValue, Operator:=xlGreater, Formula1:=dbMeanIL & lHigh)
+            .Font.Color = rgbRed
+            End With
+        End If
+                
+        If Cells(i, 1).Value = "IL Increase" Then
+            Set rng = Range(Cells(i, lFirstVal), Cells(i, lLastVal))
+            With rng.FormatConditions.Add(Type:=xlCellValue, Operator:=xlGreater, Formula1:=dbILIncrease & lHigh)
+            .Font.Color = rgbRed
+            End With
+        End If
+                
+        If Cells(i, 1).Value = "Min Refl" Then
+            Set rng = Range(Cells(i, lFirstVal), Cells(i, lLastVal))
+            With rng.FormatConditions.Add(Type:=xlCellValue, Operator:=xlGreater, Formula1:=-dbMinRL & lHigh)
+            .Font.Color = rgbRed
+            End With
+        End If
+            
+            'If the change in IL is above the spec, highlight red, if it's close to failing, highlight orange
+        If Cells(i, 1).Value = "Refl Decrease" Then
+            Set rng = Range(Cells(i, lFirstVal), Cells(i, lLastVal))
+            With rng.FormatConditions.Add(Type:=xlCellValue, Operator:=xlGreater, Formula1:=dbMaxRLDecr & lHigh)
+            .Font.Color = rgbRed
+            End With
+        End If
+            
+            'If the change in RLA is above the spec, highlight red, if it's close to failing, highlight orange
+        If Cells(i, 1).Value = "Max IL Chg" Then
+            Set rng = Range(Cells(i, lFirstVal), Cells(i, lLastVal))
+            With rng.FormatConditions.Add(Type:=xlCellValue, Operator:=xlNotBetween, Formula1:=-dbMaxILChg & lHigh, Formula2:=dbMaxILChg & lHigh)
+            .Font.Color = rgbRed
+            End With
+        End If
+Next i
+             
+Done:
+    Exit Sub
+errhandler:
+    RaiseError Err.Number, Err.Source, "Module1.ApplyCriteria", Err.Description, Erl
+
+End Sub
+
+Public Function SuperMid(ByVal strMain As String, str1 As String, str2 As String, Optional reverse As Boolean) As String
+
+Dim i As Integer, j As Integer, temp As Variant
+If reverse = True Then
+    i = InStrRev(strMain, str1)
+    j = InStrRev(strMain, str2)
+    If Abs(j - i) < Len(str1) Then
+        j = InStrRev(strMain, str2, i)
+    End If
+    If i = j Then 'try to search 2nd half of string for unique match
+        j = InStrRev(strMain, str2, i - 1)
+    End If
+Else
+    i = InStr(1, strMain, str1)
+    j = InStr(1, strMain, str2)
+    If Abs(j - i) < Len(str1) Then j = InStr(i + Len(str1), strMain, str2)
+    If i = j Then 'try to search 2nd half of string for unique match
+        j = InStr(i + 1, strMain, str2)
+    End If
+End If
+
+If j = 0 Then j = Len(strMain) + Len(str2) 'just to make it arbitrarily large
+If i = 0 Then i = Len(strMain) + Len(str1) 'just to make it arbitrarily large
+If i > j And j <> 0 Then 'swap order
+    temp = j
+    j = i
+    i = temp
+    temp = str2
+    str2 = str1
+    str1 = temp
+End If
+
+i = i + Len(str1)
+SuperMid = Mid(strMain, i, j - i)
+Exit Function
+
+
+End Function
+
+
+Public Sub SaveAs()
+
+Dim strFldr As String
+
+strFldr = SuperMid(strFldrName, "\", "\", True)
+ActiveWorkbook.SaveAs Filename:=strFldrName & "Summarized " & strFldr, FileFormat:=xlOpenXMLWorkbookMacroEnabled
+
+End Sub
+
+
+Public Sub Save()
+
+ThisWorkbook.Save
+
+End Sub
