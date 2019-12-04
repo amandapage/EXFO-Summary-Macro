@@ -1,0 +1,18 @@
+Grp E - 1R Cable Retention,T. Zitzewitz,5/15/2019 13:56,LT47478,Temp: 23.5,Hum: 26,System: EXFO 10,Ref Check,,,,,,,,,,,,,,,,,
+Fiber,1310 IL,1310 RLA,1310 RLB,1310 RLC,1550 IL,1550 RLA,1550 RLB,1550 RLC,1490 IL,1490 RLA,1490 RLB,1490 RLC,1625 IL,1625 RLA,1625 RLB,1625 RLC,LenA-B13,LenA-C13,LenA-B15,LenA-C15,LenA-B14,LenA-C14,LenA-B16,LenA-C16
+1,-0.001,<-99,<-99,<-99,-0.001,<-99,<-99,<-99,-0.002,<-99,<-99,<-99,0.001,<-99,<-99,<-99,,,,,,,,
+Grp E - 1R Cable Retention,T. Zitzewitz,5/15/2019 14:24,LT47478,Temp: 23.5,Hum: 26,System: EXFO 10,Initial Cable Retention ,,,,,,,,,,,,,,,,,
+Fiber,1310 IL,1310 RLA,1310 RLB,1310 RLC,1550 IL,1550 RLA,1550 RLB,1550 RLC,1490 IL,1490 RLA,1490 RLB,1490 RLC,1625 IL,1625 RLA,1625 RLB,1625 RLC,LenA-B13,LenA-C13,LenA-B15,LenA-C15,LenA-B14,LenA-C14,LenA-B16,LenA-C16
+1,0.159,-57.48,<-99,<-99,0.121,-58.57,<-99,<-99,0.098,-58.6,<-99,<-99,0.095,-59.92,<-99,<-99,2.36,0,2.2,0,2.53,0,2.37,0
+Grp E - 1R Cable Retention,T. Zitzewitz,5/15/2019 14:30,LT47478,Temp: 23.5,Hum: 26,System: EXFO 10,During Cable Retention 50N,,,,,,,,,,,,,,,,,
+Fiber,1550 IL,1550 RLA,1550 RLB,1550 RLC,1625 IL,1625 RLA,1625 RLB,1625 RLC,LenA-B15,LenA-C15,LenA-B16,LenA-C16,,,,,,,,,,,,
+1,0.114,-58.73,<-99,<-99,0.095,-60.01,<-99,<-99,2.2,0,2.37,0,,,,,,,,,,,,
+Grp E - 1R Cable Retention,T. Zitzewitz,5/15/2019 14:32,LT47478,Temp: 23.5,Hum: 26,System: EXFO 10,Post Cable Retention 50N,,,,,,,,,,,,,,,,,
+Fiber,1310 IL,1310 RLA,1310 RLB,1310 RLC,1550 IL,1550 RLA,1550 RLB,1550 RLC,1490 IL,1490 RLA,1490 RLB,1490 RLC,1625 IL,1625 RLA,1625 RLB,1625 RLC,LenA-B13,LenA-C13,LenA-B15,LenA-C15,LenA-B14,LenA-C14,LenA-B16,LenA-C16
+1,0.153,-57.63,<-99,<-99,0.111,-58.72,<-99,<-99,0.094,-58.58,<-99,<-99,0.089,-59.99,<-99,<-99,2.36,0,2.2,0,2.53,0,2.37,0
+Grp E - 1R Cable Retention,T. Zitzewitz,5/15/2019 14:34,LT47478,Temp: 23.5,Hum: 26,System: EXFO 10,During Cable Retention 70N,,,,,,,,,,,,,,,,,
+Fiber,1550 IL,1550 RLA,1550 RLB,1550 RLC,1625 IL,1625 RLA,1625 RLB,1625 RLC,LenA-B15,LenA-C15,LenA-B16,LenA-C16,,,,,,,,,,,,
+1,0.105,-58.68,<-99,<-99,0.088,-60,<-99,<-99,2.2,0,2.37,0,,,,,,,,,,,,
+"Grp E - 1R Cable Retention","T. Zitzewitz","05/15/19 14:36:05","LT47478","Temp: 23.5","Hum: 26","System: EXFO 10","Post Cable Retention 70N"
+"Fiber","1310 IL","1310 RLA","1310 RLB","1310 RLC","1550 IL","1550 RLA","1550 RLB","1550 RLC","1490 IL","1490 RLA","1490 RLB","1490 RLC","1625 IL","1625 RLA","1625 RLB","1625 RLC","LenA-B13","LenA-C13","LenA-B15","LenA-C15","LenA-B14","LenA-C14","LenA-B16","LenA-C16"
+1,.136,-57.45,"<-99","<-99",.104,-58.63,"<-99","<-99",.088,-58.59,"<-99","<-99",.081,-59.88,"<-99","<-99",2.36,0,2.2,0,2.53,0,2.37,0
